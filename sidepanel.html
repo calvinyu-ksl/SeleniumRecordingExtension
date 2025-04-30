@@ -24,13 +24,37 @@
         }
         .controls {
             display: flex;
-            justify-content: space-around; /* Space out buttons */
-            gap: 10px; /* Add gap between buttons */
+            flex-direction: column; /* Stack controls vertically */
+            gap: 10px; /* Add gap between control groups */
             margin-bottom: 15px;
             padding-bottom: 15px;
             border-bottom: 1px solid #ccc;
-            flex-wrap: wrap; /* Allow buttons to wrap if needed */
         }
+        .button-group { /* Group related buttons */
+             display: flex;
+             justify-content: space-around;
+             gap: 10px;
+             flex-wrap: wrap;
+        }
+        .pause-group { /* Group pause input and button */
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center; /* Center pause controls */
+            margin-top: 5px;
+        }
+        .pause-group label {
+             font-size: 12px;
+             color: #555;
+        }
+        .pause-group input[type="number"] {
+             width: 60px; /* Adjust width */
+             padding: 5px 8px;
+             border: 1px solid #ccc;
+             border-radius: 4px;
+             font-size: 12px;
+        }
+
         button {
             padding: 8px 12px;
             font-size: 13px;
@@ -40,8 +64,17 @@
             transition: background-color 0.3s ease, transform 0.1s ease;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             flex-grow: 1; /* Allow buttons to share space */
-            min-width: 100px; /* Ensure buttons have minimum width */
+            min-width: 80px; /* Adjust min-width */
         }
+         #addPauseBtn { /* Specific style for pause button */
+             flex-grow: 0; /* Don't let it grow as much */
+             background-color: #ff9800; /* Orange */
+             color: white;
+         }
+         #addPauseBtn:hover {
+             background-color: #f57c00;
+         }
+
         button:active {
             transform: scale(0.98);
         }
@@ -129,7 +162,7 @@
             margin-left: 5px;
             white-space: pre-wrap;
         }
-        .action-info {
+        .action-info { /* Style for info messages like HTML capture, Pause */
              color: #555;
              font-style: italic;
         }
@@ -163,9 +196,15 @@
     <h3>Selenium Recorder</h3>
 
     <div class="controls">
-        <button id="captureHtmlBtn">Capture HTML (<span id="htmlCount">0</span>)</button>
-        <button id="saveExportBtn">Save & Export</button>
-        <button id="cancelExitBtn">Cancel & Exit</button>
+        <div class="button-group">
+             <button id="captureHtmlBtn">Capture HTML (<span id="htmlCount">0</span>)</button>
+             <button id="saveExportBtn">Save & Export</button>
+             <button id="cancelExitBtn">Cancel & Exit</button>
+        </div>
+         <div class="pause-group"> <label for="pauseDuration">Pause (sec):</label>
+             <input type="number" id="pauseDuration" value="5" min="1" step="1">
+             <button id="addPauseBtn">Add Pause</button>
+         </div>
     </div>
 
     <ul id="actionsList">

@@ -1,14 +1,16 @@
 /**
  * sidepanel.js
  * Handles the logic for the extension's side panel UI.
- * - Displays recorded actions (including HTML captures and selector type).
- * - Handles button clicks for capturing HTML, exporting, canceling, and deleting steps.
+ * - Displays recorded actions (including HTML captures, pauses, selector type).
+ * - Handles button clicks for capturing HTML, exporting, canceling, adding pauses, and deleting steps.
  * - Communicates with the background script.
  */
 
 const captureHtmlBtn = document.getElementById('captureHtmlBtn');
 const saveExportBtn = document.getElementById('saveExportBtn');
 const cancelExitBtn = document.getElementById('cancelExitBtn');
+const addPauseBtn = document.getElementById('addPauseBtn'); // Get pause button
+const pauseDurationInput = document.getElementById('pauseDuration'); // Get pause input
 const actionsList = document.getElementById('actionsList');
 const htmlCountSpan = document.getElementById('htmlCount');
 const statusText = document.getElementById('statusText');
@@ -22,7 +24,6 @@ let isRecordingActive = false; // Track recording state locally
 function requestActionDelete(stepToDelete) {
     console.log(`Sidepanel: Requesting delete for step ${stepToDelete}`);
     statusText.textContent = `Deleting step ${stepToDelete}...`;
-    // Disable buttons during delete operation? Maybe not necessary for quick operation.
     chrome.runtime.sendMessage({ command: "delete_action", data: { step: stepToDelete } }, (response) => {
          if (chrome.runtime.lastError) {
             console.error("Sidepanel: Error sending delete_action:", chrome.runtime.lastError.message);
@@ -33,13 +34,33 @@ function requestActionDelete(stepToDelete) {
             statusText.textContent = `Failed to delete step: ${response?.message || 'Unknown error'}`;
             console.error("Sidepanel: Delete action command failed:", response?.message);
         }
-        // Re-enable buttons if they were disabled
     });
 }
 
 /**
+ * Sends a message to the background script to add a pause action.
+ * @param {number} durationSeconds - The duration of the pause in seconds.
+ */
+function requestAddPause(durationSeconds) {
+    console.log(`Sidepanel: Requesting add pause for ${durationSeconds} seconds.`);
+    statusText.textContent = `Adding pause...`;
+    chrome.runtime.sendMessage({ command: "add_pause", data: { duration: durationSeconds } }, (response) => {
+         if (chrome.runtime.lastError) {
+            console.error("Sidepanel: Error sending add_pause:", chrome.runtime.lastError.message);
+            statusText.textContent = `Error adding pause: ${chrome.runtime.lastError.message}`;
+        } else if (response && response.success) {
+            statusText.textContent = `Recording...`; // Reset status, list will update via message
+        } else {
+            statusText.textContent = `Failed to add pause: ${response?.message || 'Unknown error'}`;
+            console.error("Sidepanel: Add pause command failed:", response?.message);
+        }
+    });
+}
+
+
+/**
  * Updates the list of recorded actions displayed in the UI.
- * Handles different action types including 'HTML_Capture'.
+ * Handles different action types including 'HTML_Capture', 'Pause', 'Switch_Tab'.
  * Displays the selector type (CSS/XPath).
  * Adds a delete button for each action.
  * @param {Array} actions - Array of recorded action objects.
@@ -52,82 +73,88 @@ function updateActionsList(actions) {
         return;
     }
 
-    actions.forEach((action, index) => { // Use index for reliable identification if steps get renumbered
+    actions.forEach((action, index) => {
         const li = document.createElement('li');
-        const actionContent = document.createElement('div'); // Wrapper for step + details
+        const actionContent = document.createElement('div');
         actionContent.className = 'action-content';
 
         const stepSpan = document.createElement('span');
         stepSpan.className = 'action-step';
-        stepSpan.textContent = `${action.step || '?'}.`; // Display current step number
+        stepSpan.textContent = `${action.step || '?'}.`;
 
         actionContent.appendChild(stepSpan);
 
-        // Handle HTML_Capture type differently
-        if (action.type === 'HTML_Capture') {
-            const detailsSpan = document.createElement('span');
-            detailsSpan.className = 'action-details action-info';
-            detailsSpan.innerHTML = '<i>HTML Capture Completed</i>';
-            actionContent.appendChild(detailsSpan);
-        } else {
-            // Display logic for Click, Input, Select
-            const detailsSpan = document.createElement('span');
-            detailsSpan.className = 'action-details';
+        const detailsSpan = document.createElement('span');
+        detailsSpan.className = 'action-details'; // Default class
 
-            const typeSpan = document.createElement('span');
-            typeSpan.className = 'action-type';
-            typeSpan.textContent = action.type || 'Unknown';
+        // *** Handle different action types ***
+        switch (action.type) {
+            case 'HTML_Capture':
+                detailsSpan.classList.add('action-info');
+                detailsSpan.innerHTML = '<i>HTML Capture Completed</i>';
+                break;
+            case 'Pause':
+                detailsSpan.classList.add('action-info');
+                detailsSpan.innerHTML = `<i>Pause for ${action.duration || '?'} seconds</i>`;
+                break;
+             case 'Switch_Tab': // Handle new action type for popups
+                 detailsSpan.classList.add('action-info');
+                 detailsSpan.innerHTML = `<i>Switch to New Tab/Window (ID: ${action.tabId || '?'})</i>`;
+                 break;
+            case 'Click':
+            case 'Input':
+            case 'Select':
+            default: // Default display for standard interactions
+                const typeSpan = document.createElement('span');
+                typeSpan.className = 'action-type';
+                typeSpan.textContent = action.type || 'Unknown';
 
-            const selectorTypeSpan = document.createElement('span');
-            selectorTypeSpan.className = 'selector-label';
-            selectorTypeSpan.textContent = ` (${action.selectorType || 'CSS'}):`;
+                const selectorTypeSpan = document.createElement('span');
+                selectorTypeSpan.className = 'selector-label';
+                selectorTypeSpan.textContent = ` (${action.selectorType || 'CSS'}):`;
 
-            const selectorSpan = document.createElement('span');
-            selectorSpan.className = 'action-selector';
-            selectorSpan.textContent = ` ${action.selector || 'N/A'}`;
+                const selectorSpan = document.createElement('span');
+                selectorSpan.className = 'action-selector';
+                selectorSpan.textContent = ` ${action.selector || 'N/A'}`;
 
-            detailsSpan.appendChild(typeSpan);
-            detailsSpan.appendChild(selectorTypeSpan);
-            detailsSpan.appendChild(selectorSpan);
+                detailsSpan.appendChild(typeSpan);
+                detailsSpan.appendChild(selectorTypeSpan);
+                detailsSpan.appendChild(selectorSpan);
 
-            if (action.hasOwnProperty('value') && action.value !== null && action.value !== undefined) {
-                const valueSpan = document.createElement('span');
-                valueSpan.className = 'action-value';
-                let displayValue = String(action.value);
-                if (displayValue.length > 50) {
-                     displayValue = displayValue.substring(0, 50) + '...';
+                if (action.hasOwnProperty('value') && action.value !== null && action.value !== undefined) {
+                    const valueSpan = document.createElement('span');
+                    valueSpan.className = 'action-value';
+                    let displayValue = String(action.value);
+                    if (displayValue.length > 50) {
+                         displayValue = displayValue.substring(0, 50) + '...';
+                    }
+                    valueSpan.textContent = ` (${displayValue})`;
+                    detailsSpan.appendChild(valueSpan);
                 }
-                valueSpan.textContent = ` (${displayValue})`;
-                detailsSpan.appendChild(valueSpan);
-            }
-             actionContent.appendChild(detailsSpan);
+                break; // End default case
         }
 
+        actionContent.appendChild(detailsSpan); // Add the details span
         li.appendChild(actionContent); // Add step and details container
 
-        // *** Add Delete Button ***
+        // Add Delete Button (for all action types)
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-action-btn';
-        deleteBtn.textContent = '✕'; // Use '✕' (multiplication sign) as an 'X'
+        deleteBtn.textContent = '✕';
         deleteBtn.title = `Delete step ${action.step}`;
-        // Store the step number to delete in a data attribute
         deleteBtn.dataset.step = action.step;
 
         deleteBtn.addEventListener('click', (event) => {
             const stepToDelete = parseInt(event.target.dataset.step);
             if (!isNaN(stepToDelete)) {
-                // Optional: Add a confirmation dialog
-                // if (confirm(`Are you sure you want to delete step ${stepToDelete}?`)) {
-                //    requestActionDelete(stepToDelete);
-                // }
-                requestActionDelete(stepToDelete); // Directly delete for now
+                requestActionDelete(stepToDelete);
             } else {
                 console.error("Could not determine step to delete from button:", event.target);
             }
         });
 
-        li.appendChild(deleteBtn); // Add delete button to the list item
-        actionsList.appendChild(li); // Add the list item to the list
+        li.appendChild(deleteBtn);
+        actionsList.appendChild(li);
     });
 
     actionsList.scrollTop = actionsList.scrollHeight;
@@ -145,6 +172,8 @@ function updateUIState(isRecording, htmlCount = 0, statusMsg = null) {
     captureHtmlBtn.disabled = !isRecording;
     saveExportBtn.disabled = !isRecording;
     cancelExitBtn.disabled = !isRecording;
+    addPauseBtn.disabled = !isRecording; // Disable pause button if not recording
+    pauseDurationInput.disabled = !isRecording; // Disable input if not recording
     htmlCountSpan.textContent = htmlCount;
 
     if (!isRecording && !statusMsg) {
@@ -165,7 +194,7 @@ captureHtmlBtn.addEventListener('click', () => {
             console.error("Sidepanel: Error sending capture_html:", chrome.runtime.lastError.message);
             statusText.textContent = `Error: ${chrome.runtime.lastError.message}`;
         } else if (response && response.success) {
-            statusText.textContent = `Recording...`; // Reset status, update comes via message
+            statusText.textContent = `Recording...`;
         } else {
             statusText.textContent = "Failed to capture HTML.";
             console.error("Sidepanel: Capture HTML command failed:", response?.message);
@@ -180,6 +209,8 @@ saveExportBtn.addEventListener('click', () => {
     saveExportBtn.disabled = true;
     captureHtmlBtn.disabled = true;
     cancelExitBtn.disabled = true;
+    addPauseBtn.disabled = true;
+    pauseDurationInput.disabled = true;
 
     chrome.runtime.sendMessage({ command: "save_export" }, (response) => {
         if (chrome.runtime.lastError) {
@@ -188,6 +219,8 @@ saveExportBtn.addEventListener('click', () => {
              saveExportBtn.disabled = !isRecordingActive;
              captureHtmlBtn.disabled = !isRecordingActive;
              cancelExitBtn.disabled = !isRecordingActive;
+             addPauseBtn.disabled = !isRecordingActive;
+             pauseDurationInput.disabled = !isRecordingActive;
         } else if (response && response.success) {
             statusText.textContent = "Export successful! Recording stopped.";
         } else {
@@ -196,6 +229,8 @@ saveExportBtn.addEventListener('click', () => {
              saveExportBtn.disabled = !isRecordingActive;
              captureHtmlBtn.disabled = !isRecordingActive;
              cancelExitBtn.disabled = !isRecordingActive;
+             addPauseBtn.disabled = !isRecordingActive;
+             pauseDurationInput.disabled = !isRecordingActive;
         }
     });
 });
@@ -206,6 +241,8 @@ cancelExitBtn.addEventListener('click', () => {
     saveExportBtn.disabled = true;
     captureHtmlBtn.disabled = true;
     cancelExitBtn.disabled = true;
+    addPauseBtn.disabled = true;
+    pauseDurationInput.disabled = true;
 
     chrome.runtime.sendMessage({ command: "cancel_recording" }, (response) => {
         if (chrome.runtime.lastError) {
@@ -213,11 +250,22 @@ cancelExitBtn.addEventListener('click', () => {
             statusText.textContent = `Error cancelling: ${chrome.runtime.lastError.message}`;
         } else if (response && response.success) {
             statusText.textContent = "Recording cancelled.";
-            // Panel should close via background script disabling it
         } else {
             statusText.textContent = `Failed to cancel: ${response?.message || 'Unknown error'}`;
         }
     });
+});
+
+// *** Add listener for Pause button ***
+addPauseBtn.addEventListener('click', () => {
+    if (!isRecordingActive) return;
+    const duration = parseInt(pauseDurationInput.value);
+    if (isNaN(duration) || duration <= 0) {
+        statusText.textContent = "Invalid pause duration.";
+        // Optionally add visual feedback to input field
+        return;
+    }
+    requestAddPause(duration);
 });
 
 
@@ -229,12 +277,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const { actions, isRecording, htmlCount, startUrl, statusMessage } = message.data;
             const currentHtmlCount = htmlCount !== undefined ? htmlCount : parseInt(htmlCountSpan.textContent || '0');
 
-            // Update actions list *first*
             if (actions !== undefined) {
-                updateActionsList(actions); // This will redraw the list with delete buttons
+                updateActionsList(actions);
             }
 
-            // Update overall state
             if (isRecording !== undefined) {
                 updateUIState(isRecording, currentHtmlCount, statusMessage);
             } else if (htmlCount !== undefined) {
