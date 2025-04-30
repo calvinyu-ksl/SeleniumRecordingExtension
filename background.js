@@ -3,12 +3,13 @@
  * Handles background tasks for the Selenium Recorder extension.
  * - Manages recording state across main tab and popups within a WINDOW.
  * - Listens for messages from popup, content script, and side panel.
- * - Generates the Selenium script.
+ * - Generates the Selenium script (handling CSS/XPath, JS click fallback, screenshots, pauses).
  * - Creates and downloads the ZIP archive.
  * *** Side panel is opened globally for the window. ***
  * *** Allows recording to continue across same-tab navigations/reloads. ***
  * *** Handles cancellation, delete, and pause requests from side panel. ***
  * *** Detects popups/new tabs AND manual tab activations within the recorded window. ***
+ * *** Captures screenshot along with HTML source. ***
  */
 
 // --- Load required scripts ---
@@ -23,7 +24,8 @@ try {
 // --- State Variables ---
 let isRecording = false;
 let recordedActions = [];
-let capturedHTMLs = [];
+// let capturedHTMLs = []; // Replaced by captureData
+let captureData = []; // Array to store {html: string, screenshotDataUrl: string, timestamp: number} objects
 let startURL = '';
 let recordingTabId = null; // Tab currently being interacted with
 let recordedWindowId = null; // Window where recording is active
@@ -205,15 +207,16 @@ function repr(value) {
 function resetRecordingState() {
     isRecording = false;
     recordedActions = [];
-    capturedHTMLs = [];
+    // capturedHTMLs = []; // Replaced
+    captureData = []; // Clear combined capture data
     startURL = '';
     recordingTabId = null;
     recordedWindowId = null;
-    injectedTabs.clear(); // Clear the set of injected tabs
+    injectedTabs.clear();
     console.log("Background: Recording state reset.");
 
     // Update side panel UI if it's still open
-    chrome.runtime.sendMessage({ command: "update_ui", data: { actions: [], isRecording: false, htmlCount: 0 } })
+    chrome.runtime.sendMessage({ command: "update_ui", data: { actions: [], isRecording: false, htmlCount: 0 } }) // Send htmlCount as 0
         .catch(e => console.log("Background: Side panel likely closed during reset (expected)."));
 }
 
@@ -223,12 +226,10 @@ function resetRecordingState() {
  */
 async function ensureContentScriptInjected(tabId) {
     if (!tabId || injectedTabs.has(tabId)) {
-        // console.log(`Background: Skipping injection for tab ${tabId} (already injected or invalid)`);
-        return; // Already injected or invalid tab ID
+        return;
     }
     console.log(`Background: Attempting to inject content script into tab ${tabId}`);
     try {
-        // Check if tab exists and is accessible first
         const tab = await chrome.tabs.get(tabId);
         if (!tab || tab.url?.startsWith('chrome://') || tab.url?.startsWith('about:')) {
             console.warn(`Background: Cannot inject script into inaccessible tab ${tabId} (URL: ${tab?.url})`);
@@ -240,10 +241,9 @@ async function ensureContentScriptInjected(tabId) {
             files: ['content.js']
         });
         console.log(`Background: Content script injected successfully into tab ${tabId}.`);
-        injectedTabs.add(tabId); // Mark as injected
+        injectedTabs.add(tabId);
     } catch (err) {
         console.error(`Background: Failed to inject content script into tab ${tabId}:`, err);
-        // Don't add to injectedTabs if it failed
     }
 }
 
@@ -277,14 +277,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
             console.log(`Background: Starting recording state for tab ${recordingTabId} in window ${recordedWindowId} with URL: ${startURL}`);
 
-            // Inject into the initial tab
             ensureContentScriptInjected(recordingTabId)
-                .then(() => new Promise(resolve => setTimeout(resolve, 250))) // Wait after injection attempt
+                .then(() => new Promise(resolve => setTimeout(resolve, 250)))
                 .then(() => {
                     console.log("Background: Sending initial UI update to side panel.");
                     return chrome.runtime.sendMessage({
                         command: "update_ui",
-                        data: { actions: recordedActions, isRecording: true, startUrl: startURL, htmlCount: capturedHTMLs.length }
+                        data: { actions: recordedActions, isRecording: true, startUrl: startURL, htmlCount: captureData.length } // Use captureData length
                     });
                 })
                 .then(() => {
@@ -293,17 +292,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 })
                 .catch(error => {
                     console.error("Background: Error during recording start sequence:", error);
-                    resetRecordingState(); // Clean up fully on error
+                    resetRecordingState();
                     sendResponse({ success: false, message: `Failed to start recording logic: ${error.message}` });
                 });
 
-            return true; // Indicate async response
+            return true;
 
         case "record_action":
-            // *** Check if the action comes from the currently targeted tab and window ***
             if (!isRecording || !recordingTabId || !sender.tab || sender.tab.id !== recordingTabId || sender.tab.windowId !== recordedWindowId) {
                 console.warn(`Background: Ignoring action from non-recorded tab/window. Expected: T${recordingTabId}/W${recordedWindowId}, Got: T${sender.tab?.id}/W${sender.tab?.windowId}`);
-                return true; // Ignore but acknowledge
+                return true;
             }
             const action = message.data;
             action.step = recordedActions.length + 1;
@@ -323,7 +321,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             console.log("Background: Recording action:", action);
             recordedActions.push(action);
 
-            chrome.runtime.sendMessage({ command: "update_ui", data: { actions: recordedActions, isRecording: true, htmlCount: capturedHTMLs.length } })
+            chrome.runtime.sendMessage({ command: "update_ui", data: { actions: recordedActions, isRecording: true, htmlCount: captureData.length } }) // Use captureData length
                 .catch(e => console.warn("Background: Side panel not available for action update:", e));
 
             sendResponse({ success: true });
@@ -334,44 +332,64 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ success: false, message: "Not recording." });
                 return true;
              }
-             // Send message to the *currently targeted* recording tab
-             chrome.tabs.sendMessage(recordingTabId, { command: "get_html" }, (response) => {
-                 if (chrome.runtime.lastError) {
-                     console.error(`Background: Error requesting HTML from tab ${recordingTabId}:`, chrome.runtime.lastError.message);
-                     sendResponse({ success: false, message: chrome.runtime.lastError.message });
-                 } else if (response && response.success && typeof response.html === 'string') {
-                     capturedHTMLs.push(response.html);
-                     console.log(`Background: HTML captured (${capturedHTMLs.length} total). Size: ${response.html.length}`);
+             const currentCaptureTimestamp = Date.now(); // Timestamp for this capture event
 
+             // 1. Get HTML from content script
+             chrome.tabs.sendMessage(recordingTabId, { command: "get_html" }, (htmlResponse) => {
+                 if (chrome.runtime.lastError || !htmlResponse || !htmlResponse.success || typeof htmlResponse.html !== 'string') {
+                     console.error(`Background: Error requesting HTML from tab ${recordingTabId}:`, chrome.runtime.lastError?.message || "Invalid response");
+                     sendResponse({ success: false, message: chrome.runtime.lastError?.message || "Failed to get HTML." });
+                     return;
+                 }
+
+                 const capturedHtmlContent = htmlResponse.html;
+                 console.log(`Background: HTML received from tab ${recordingTabId}. Size: ${capturedHtmlContent.length}`);
+
+                 // 2. Capture Screenshot
+                 chrome.tabs.captureVisibleTab(recordedWindowId, { format: "png" }, (screenshotDataUrl) => {
+                     if (chrome.runtime.lastError || !screenshotDataUrl) {
+                         console.error(`Background: Error capturing screenshot for tab ${recordingTabId}:`, chrome.runtime.lastError?.message || "No data URL returned");
+                         // Proceed without screenshot? Or fail? Let's proceed without for now.
+                         screenshotDataUrl = null; // Mark as failed
+                     } else {
+                         console.log(`Background: Screenshot captured for tab ${recordingTabId}.`);
+                     }
+
+                     // 3. Store HTML and Screenshot Data
+                     captureData.push({
+                         html: capturedHtmlContent,
+                         screenshotDataUrl: screenshotDataUrl, // Store data URL (or null if failed)
+                         timestamp: currentCaptureTimestamp // Store timestamp for potential linking/deletion
+                     });
+
+                     // 4. Record the HTML_Capture action
                      const captureAction = {
                          type: 'HTML_Capture',
                          step: recordedActions.length + 1,
-                         timestamp: Date.now(),
+                         timestamp: currentCaptureTimestamp, // Add timestamp to action
                          selectorType: 'N/A'
                      };
                      recordedActions.push(captureAction);
                      console.log("Background: Recording action:", captureAction);
 
+                     // 5. Update Side Panel
                      chrome.runtime.sendMessage({
                          command: "update_ui",
                          data: {
                              actions: recordedActions,
-                             htmlCount: capturedHTMLs.length,
+                             htmlCount: captureData.length, // Use length of captureData array
                              isRecording: true
                          }
                       })
                          .catch(e => console.warn("Background: Side panel not available for HTML count update:", e));
 
-                     sendResponse({ success: true, count: capturedHTMLs.length });
-                 } else {
-                     console.error("Background: Failed to get valid HTML from content script.", response);
-                     sendResponse({ success: false, message: "Failed to get valid HTML." });
-                 }
+                     sendResponse({ success: true, count: captureData.length });
+                 });
              }).catch(error => {
                   console.error(`Background: Error sending get_html message to tab ${recordingTabId}:`, error);
                   sendResponse({ success: false, message: `Error contacting tab: ${error.message}` });
              });
-             return true;
+             return true; // Indicate async response
 
         case "delete_action":
              if (!isRecording) {
@@ -397,9 +415,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
              const deletedAction = recordedActions.splice(indexToDelete, 1)[0];
              console.log("Background: Deleted action:", deletedAction);
 
-             // Don't delete HTML blob for safety
-             if (deletedAction.type === 'HTML_Capture') {
-                  console.warn("Background: HTML blob deletion on action delete is disabled for safety.");
+             // If the deleted action was an HTML capture, also remove the corresponding capture data object
+             if (deletedAction.type === 'HTML_Capture' && deletedAction.timestamp) {
+                 const captureDataIndex = captureData.findIndex(data => data.timestamp === deletedAction.timestamp);
+                 if (captureDataIndex !== -1) {
+                     console.log(`Background: Removing associated HTML/Screenshot capture data at index ${captureDataIndex}`);
+                     captureData.splice(captureDataIndex, 1);
+                 } else {
+                     console.warn(`Background: Could not find matching capture data for deleted action timestamp ${deletedAction.timestamp}`);
+                 }
              }
 
              // Re-number subsequent steps
@@ -412,7 +436,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                  command: "update_ui",
                  data: {
                      actions: recordedActions,
-                     htmlCount: capturedHTMLs.length,
+                     htmlCount: captureData.length, // Use captureData length
                      isRecording: true
                  }
               })
@@ -447,7 +471,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 command: "update_ui",
                 data: {
                     actions: recordedActions,
-                    htmlCount: capturedHTMLs.length,
+                    htmlCount: captureData.length, // Use captureData length
                     isRecording: true
                 }
              })
@@ -477,16 +501,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 const zip = new JSZip();
                 zip.file("selenium_script.py", seleniumScript);
 
-                console.log(`Background: Preparing to zip ${capturedHTMLs.length} captured HTML file(s).`);
-                // console.log('Background: capturedHTMLs array content (lengths):', capturedHTMLs.map(h => h?.length ?? 'null')); // Optional debug
+                console.log(`Background: Preparing to zip ${captureData.length} HTML/Screenshot pairs.`);
 
-                capturedHTMLs.forEach((html, index) => {
-                    const filename = `capture_${index + 1}.html`;
-                    // console.log(`Background: Adding file to zip: ${filename}, HTML size: ${html?.length ?? 'N/A'}`); // Optional debug
-                    if (typeof html === 'string') {
-                         zip.file(filename, html);
+                // *** Iterate through captureData to add HTML and Screenshots ***
+                captureData.forEach((data, index) => {
+                    const baseFilename = `capture_${index + 1}`;
+
+                    // Add HTML file
+                    const htmlFilename = `${baseFilename}.html`;
+                    if (typeof data.html === 'string') {
+                        console.log(`Background: Adding file to zip: ${htmlFilename}`);
+                        zip.file(htmlFilename, data.html);
                     } else {
-                         console.warn(`Background: Skipping invalid HTML data at index ${index}`);
+                        console.warn(`Background: Skipping invalid HTML data at index ${index}`);
+                    }
+
+                    // Add Screenshot file (if available)
+                    const pngFilename = `${baseFilename}.png`;
+                    if (data.screenshotDataUrl && data.screenshotDataUrl.startsWith('data:image/png;base64,')) {
+                        // Extract base64 data part
+                        const base64Data = data.screenshotDataUrl.substring('data:image/png;base64,'.length);
+                        console.log(`Background: Adding file to zip: ${pngFilename}`);
+                        // Add as base64 data
+                        zip.file(pngFilename, base64Data, { base64: true });
+                    } else {
+                         console.warn(`Background: Skipping invalid or missing screenshot data at index ${index}`);
                     }
                 });
 
@@ -546,9 +585,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 return true;
             }
             console.log("Background: Cancel recording request received.");
-            resetRecordingState(); // Reset state, panel stays open
-            // We could try to close the panel programmatically if needed:
-            // if (recordedWindowId) { chrome.sidePanel.setOptions({ windowId: recordedWindowId, enabled: false }); }
+            resetRecordingState();
             sendResponse({ success: true });
             return true;
 
@@ -562,7 +599,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                  console.log("Background: Side panel requested current state.");
                  sendResponse({
                      actions: recordedActions,
-                     htmlCount: capturedHTMLs.length,
+                     htmlCount: captureData.length, // Use captureData length
                      isRecording: true,
                      startUrl: startURL
                  });
@@ -575,7 +612,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "stop_recording_internal":
             if (isRecording && sender.contextType === "SIDE_PANEL") {
                  console.log("Background: Side panel context destroyed, stopping recording.");
-                 resetRecordingState(); // Reset state only
+                 resetRecordingState();
                  sendResponse({success: true});
             }
              else {
@@ -593,32 +630,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Tab listeners
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-    // Stop recording if the recorded tab itself is closed
     if (isRecording && tabId === recordingTabId) {
         console.log(`Background: Recorded tab (${tabId}) was closed. Stopping recording.`);
         resetRecordingState();
     }
-    // Stop recording if the window containing the recording is closed
     if (isRecording && removeInfo.windowId === recordedWindowId && removeInfo.isWindowClosing) {
         console.log(`Background: Recorded window (${recordedWindowId}) closed. Stopping recording.`);
         resetRecordingState();
     }
 });
 
-// *** Add listener for manual tab activation ***
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
-    // Check if recording is active and the activation is within the recorded window
     if (isRecording && recordedWindowId && activeInfo.windowId === recordedWindowId) {
         const newTabId = activeInfo.tabId;
-        // Check if it's a switch to a *different* tab than the one we were last recording
         if (newTabId !== recordingTabId) {
             console.log(`Background: Tab activated: ${newTabId} in recorded window ${recordedWindowId}. Switching target.`);
 
-             // 1. Record Switch Tab action
              const switchAction = {
                 type: 'Switch_Tab',
                 tabId: newTabId,
-                // url: await getTabUrl(newTabId), // Getting URL here might be async, skip for simplicity
                 step: recordedActions.length + 1,
                 timestamp: Date.now(),
                 selectorType: 'N/A'
@@ -626,19 +656,15 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
             recordedActions.push(switchAction);
             console.log("Background: Recording action:", switchAction);
 
-            // 2. Update recording target
             recordingTabId = newTabId;
-
-            // 3. Ensure content script is injected into the newly activated tab
             await ensureContentScriptInjected(newTabId);
 
-            // 4. Update the side panel UI
             chrome.runtime.sendMessage({
                 command: "update_ui",
                 data: {
                     actions: recordedActions,
                     isRecording: true,
-                    htmlCount: capturedHTMLs.length,
+                    htmlCount: captureData.length, // Use captureData length
                 }
              })
                 .catch(e => console.warn("Background: Side panel not available for tab activation update:", e));
@@ -647,14 +673,11 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 });
 
 
-// Detect popups/new tabs opened from the recorded tab within the same window context
 chrome.tabs.onCreated.addListener((tab) => {
-    // Check if recording, if the new tab has an opener, and if it's in the recorded window
     if (isRecording && tab.openerTabId === recordingTabId && tab.windowId === recordedWindowId && tab.id) {
         const newTabId = tab.id;
         console.log(`Background: New tab (${newTabId}) opened by recorded tab (${recordingTabId}) in same window. URL: ${tab.pendingUrl || tab.url}`);
 
-        // 1. Record Switch Tab action
         const switchAction = {
             type: 'Switch_Tab',
             tabId: newTabId,
@@ -666,31 +689,28 @@ chrome.tabs.onCreated.addListener((tab) => {
         recordedActions.push(switchAction);
         console.log("Background: Recording action:", switchAction);
 
-        // 2. Update recording target
         console.log(`Background: Switching recording target from tab ${recordingTabId} to ${newTabId}`);
         recordingTabId = newTabId;
 
-        // 3. Inject content script when new tab finishes loading
         const listener = function(updatedTabId, changeInfo, updatedTab) {
             if (updatedTabId === newTabId && changeInfo.status === 'complete') {
-                chrome.tabs.onUpdated.removeListener(listener); // Clean up listener
+                chrome.tabs.onUpdated.removeListener(listener);
 
                 if (!isRecording || recordingTabId !== newTabId) {
                      console.log(`Background: Recording stopped/changed before tab ${newTabId} finished. Skipping injection.`);
                      return;
                 }
-                ensureContentScriptInjected(newTabId); // Use helper function
+                ensureContentScriptInjected(newTabId);
             }
         };
         chrome.tabs.onUpdated.addListener(listener);
 
-        // 4. Update side panel UI
         chrome.runtime.sendMessage({
             command: "update_ui",
             data: {
                 actions: recordedActions,
                 isRecording: true,
-                htmlCount: capturedHTMLs.length,
+                htmlCount: captureData.length, // Use captureData length
             }
          })
             .catch(e => console.warn("Background: Side panel not available for tab switch update:", e));
@@ -699,9 +719,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 
-// Listener for same-tab updates (reloads, navigations)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    // Only log if it's the currently recorded tab
     if (isRecording && tabId === recordingTabId) {
         if (changeInfo.url) {
              console.log(`Background: Recorded tab (${tabId}) navigated to ${changeInfo.url}. Recording continues.`);
