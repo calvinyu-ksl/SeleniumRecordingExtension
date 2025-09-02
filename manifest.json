@@ -1,32 +1,30 @@
 {
   "manifest_version": 3,
-  "name": "Selenium Recorder",
-  "version": "1.0",
-  "description": "Records browser interactions and exports them as a Selenium Python script.",
+  "name": "SeleniumBase Recorder",
+  "version": "1.1",
+  "description": "Records browser interactions and exports them as a SeleniumBase Python script.",
   "permissions": [
-    "activeTab", // Access the currently active tab
-    "scripting", // Inject content scripts
-    "sidePanel", // Use the side panel API
-    "downloads", // Allow downloading the generated ZIP file
-    "storage"    // To store recording state temporarily if needed
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "downloads",
+    "storage"
   ],
   "background": {
-    "service_worker": "background.js" // Specifies the background script
+    "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html" // The popup shown when clicking the extension icon
-    // "default_icon" key removed
+    "default_popup": "popup.html"
   },
   "content_scripts": [
     {
-      // Defines when the content script should NOT be injected initially.
-      // We will inject it programmatically using scripting.executeScript.
-      "matches": ["<all_urls>"], // Potentially applies to all URLs
+      "matches": [
+        "<all_urls>"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle",
-      "all_frames": false // Only inject in the top frame initially
+      "all_frames": false
     }
   ],
-  // "icons" key removed entirely
-  "minimum_chrome_version": "114" // Required for sidePanel API
+  "minimum_chrome_version": "114"
 }

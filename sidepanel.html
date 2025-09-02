@@ -3,216 +3,268 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recording</title>
+    <title>SeleniumBase Recorder</title>
     <style>
+        :root {
+            --primary-bg: #2a2a2e;
+            --secondary-bg: #3a3a40;
+            --text-color: #e0e0e0;
+            --accent-color: #4d90fe;
+            --accent-hover: #6ca5ff;
+            --danger-color: #e74c3c;
+            --danger-hover: #f16a5c;
+            --success-color: #2ecc71;
+            --border-color: #4a4a50;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 15px;
-            background-color: #f4f4f4;
+            font-family: var(--font-family);
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            margin: 0;
+            padding: 12px;
+            font-size: 14px;
             display: flex;
             flex-direction: column;
-            height: 100vh; /* Ensure body takes full height */
-            box-sizing: border-box; /* Include padding in height calculation */
-            margin: 0;
+            height: 100vh;
+            box-sizing: border-box;
         }
-        h3 {
-            margin-top: 0;
-            color: #333;
-            text-align: center;
-            border-bottom: 1px solid #ccc;
+
+        .header {
             padding-bottom: 10px;
-        }
-        .controls {
-            display: flex;
-            flex-direction: column; /* Stack controls vertically */
-            gap: 10px; /* Add gap between control groups */
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #ccc;
-        }
-        .button-group { /* Group related buttons */
-             display: flex;
-             justify-content: space-around;
-             gap: 10px;
-             flex-wrap: wrap;
-        }
-        .pause-group { /* Group pause input and button */
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            justify-content: center; /* Center pause controls */
-            margin-top: 5px;
-        }
-        .pause-group label {
-             font-size: 12px;
-             color: #555;
-        }
-        .pause-group input[type="number"] {
-             width: 60px; /* Adjust width */
-             padding: 5px 8px;
-             border: 1px solid #ccc;
-             border-radius: 4px;
-             font-size: 12px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px;
         }
 
-        button {
+        h1 {
+            font-size: 18px;
+            margin: 0 0 8px 0;
+            color: var(--accent-color);
+        }
+
+        .status-bar {
+            background-color: var(--secondary-bg);
             padding: 8px 12px;
-            font-size: 13px;
-            cursor: pointer;
-            border: none;
-            border-radius: 5px;
-            transition: background-color 0.3s ease, transform 0.1s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            flex-grow: 1; /* Allow buttons to share space */
-            min-width: 80px; /* Adjust min-width */
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 10px;
         }
-         #addPauseBtn { /* Specific style for pause button */
-             flex-grow: 0; /* Don't let it grow as much */
-             background-color: #ff9800; /* Orange */
-             color: white;
-         }
-         #addPauseBtn:hover {
-             background-color: #f57c00;
-         }
 
-        button:active {
-            transform: scale(0.98);
+        .status-bar p {
+            margin: 4px 0;
         }
-        #captureHtmlBtn {
-            background-color: #2196F3; /* Blue */
+
+        .status-bar strong {
+            color: var(--accent-hover);
+        }
+        
+        #start-url {
+            color: var(--text-color);
+            text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            max-width: 90%;
+            vertical-align: middle;
+        }
+        #start-url:hover {
+            text-decoration: underline;
+        }
+
+        #status-message {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        .status-recording {
+            background-color: var(--success-color);
             color: white;
         }
-        #captureHtmlBtn:hover {
-            background-color: #1976D2;
-        }
-        #saveExportBtn {
-            background-color: #4CAF50; /* Green */
+
+        .status-stopped {
+            background-color: var(--danger-color);
             color: white;
         }
-        #saveExportBtn:hover {
-            background-color: #45a049;
+
+        .actions-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            background-color: var(--secondary-bg);
+            border-radius: 6px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
         }
-         #cancelExitBtn {
-            background-color: #f44336; /* Red */
-            color: white;
-        }
-        #cancelExitBtn:hover {
-            background-color: #d32f2f;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-            opacity: 0.7;
-        }
-        #actionsList {
+
+        #actions-list {
             list-style: none;
             padding: 0;
             margin: 0;
-            flex-grow: 1; /* Allow list to take remaining space */
-            overflow-y: auto; /* Add scrollbar if list is long */
-            background-color: #fff;
-            border: 1px solid #ddd;
+        }
+
+        .action-item, .action-item-placeholder {
+            background-color: var(--primary-bg);
+            border: 1px solid var(--border-color);
+            padding: 8px 10px;
+            margin-bottom: 6px;
             border-radius: 4px;
-            font-size: 12px; /* Smaller font for actions */
-        }
-        #actionsList li {
-            padding: 8px 5px 8px 10px; /* Adjust padding for delete button */
-            border-bottom: 1px solid #eee;
             display: flex;
-            justify-content: space-between; /* Push delete button to the right */
+            justify-content: space-between;
             align-items: center;
+            transition: background-color 0.2s;
         }
-        #actionsList li:last-child {
-            border-bottom: none;
+        
+        .action-item.html-capture-item {
+            background-color: #334155; /* A different color for HTML captures */
         }
-        .action-content { /* Container for step and details */
-             display: flex;
-             align-items: center;
-             flex-grow: 1; /* Allow content to take space */
-             margin-right: 5px; /* Space before delete button */
+
+        .action-item:hover {
+            background-color: #4a4a50;
         }
+
+        .action-item-placeholder {
+            color: #888;
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        .action-content {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            overflow: hidden;
+        }
+
         .action-step {
             font-weight: bold;
-            color: #555;
-            min-width: 25px;
-            margin-right: 5px;
+            color: var(--accent-color);
         }
-        .action-details {
-            flex-grow: 1;
-            margin-left: 5px;
-            word-break: break-word;
-        }
+
         .action-type {
-            font-style: italic;
-            color: #007bff;
-        }
-         .selector-label {
-             color: #888;
-             font-size: 0.9em;
-             margin-left: 5px;
-         }
-        .action-selector {
-            color: #6c757d;
-            font-family: monospace;
-            margin-left: 5px;
-        }
-        .action-value {
-            color: #28a745;
             font-weight: bold;
-            margin-left: 5px;
-            white-space: pre-wrap;
+            flex-shrink: 0;
         }
-        .action-info { /* Style for info messages like HTML capture, Pause */
-             color: #555;
-             font-style: italic;
+
+        .action-details {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #b0b0b0;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
         }
-        .delete-action-btn { /* Style for delete button */
+
+        .delete-button {
             background: none;
             border: none;
-            color: #f44336; /* Red */
+            color: #aaa;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            padding: 0 5px;
-            margin-left: 5px;
+            font-size: 16px;
+            padding: 2px 6px;
+            border-radius: 4px;
             line-height: 1;
-            opacity: 0.7;
-            transition: opacity 0.2s ease;
         }
-        .delete-action-btn:hover {
-            opacity: 1;
+
+        .delete-button:hover {
+            color: var(--danger-color);
+            background-color: var(--secondary-bg);
         }
-        .status-footer {
-            margin-top: 10px;
+
+        .footer {
             padding-top: 10px;
-            border-top: 1px solid #ccc;
-            font-size: 12px;
-            color: #666;
-            text-align: center;
+            border-top: 1px solid var(--border-color);
+            margin-top: 10px;
         }
+        
+        .manual-capture {
+            margin-bottom: 10px;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            font-size: 14px;
+        }
+        
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        button:not(:disabled):active {
+            transform: scale(0.98);
+        }
+
+        #capture-html-button {
+             width: 100%;
+             background-color: #555;
+             color: var(--text-color);
+        }
+        #capture-html-button:not(:disabled):hover {
+            background-color: #666;
+        }
+
+        #save-button {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        #save-button:not(:disabled):hover {
+            background-color: var(--accent-hover);
+        }
+
+        #cancel-button {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        #cancel-button:not(:disabled):hover {
+            background-color: var(--danger-hover);
+        }
+
     </style>
 </head>
 <body>
-    <h3>Selenium Recorder</h3>
 
-    <div class="controls">
-        <div class="button-group">
-             <button id="captureHtmlBtn">Capture HTML (<span id="htmlCount">0</span>)</button>
-             <button id="saveExportBtn">Save & Export</button>
-             <button id="cancelExitBtn">Cancel & Exit</button>
+    <div class="header">
+        <h1>SeleniumBase Recorder</h1>
+        <div class="status-bar">
+            <p><strong>Start URL:</strong> <a id="start-url" href="#" target="_blank" title="Click to open start URL">Not set</a></p>
+            <p><strong>HTML Captures:</strong> <span id="html-count">0</span></p>
+            <div id="status-message" class="status-stopped">Recording stopped.</div>
         </div>
-         <div class="pause-group"> <label for="pauseDuration">Pause (sec):</label>
-             <input type="number" id="pauseDuration" value="5" min="1" step="1">
-             <button id="addPauseBtn">Add Pause</button>
-         </div>
     </div>
 
-    <ul id="actionsList">
-        <li><i>Recording started...</i></li>
-    </ul>
+    <div class="actions-container">
+        <div id="actions-list">
+            <!-- Recorded actions will be dynamically inserted here -->
+            <div class="action-item-placeholder">Start recording from the extension popup.</div>
+        </div>
+    </div>
 
-    <div class="status-footer">
-        Status: <span id="statusText">Recording...</span>
+    <div class="footer">
+         <div class="manual-capture">
+            <button id="capture-html-button" disabled>Capture HTML Manually</button>
+        </div>
+        <div class="button-group">
+            <button id="cancel-button" disabled>Cancel & Discard</button>
+            <button id="save-button" disabled>Save & Export</button>
+        </div>
     </div>
 
     <script src="sidepanel.js"></script>

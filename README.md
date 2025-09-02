@@ -7,17 +7,10 @@ Selenium Recorder is a Google Chrome browser extension designed to simplify the 
 ## Features
 
 * **User Interaction Recording:** Captures clicks, text inputs (final value on change/blur), and dropdown selections.
-* **Real-time Action Display:** Shows a list of recorded actions in the browser's side panel, indicating the selector type (CSS/XPath) used and confirming HTML captures or pauses. Allows deletion of individual steps.
+* **Real-time Action Display:** Shows a list of recorded actions, including HTML capture confirmations, in the browser's side panel.
 * **HTML Source Capture:** Allows users to capture the full HTML source of the webpage at any point during the recording.
-* **Pause Recording:** Allows inserting custom pauses (in seconds) into the recording sequence via the side panel.
-* **Popup/New Tab Recording:** Automatically detects new tabs/windows opened by the recorded tab and continues recording interactions within the new tab. (Note: Generated script does not yet handle window switching).
-* **Selenium Script Generation:** Automatically generates a Python script using the `selenium-webdriver` library based on the recorded actions.
-    * **Selector Strategy:** Prioritizes unique & stable IDs, falls back to attributes (`name`, `data-testid`, `role`, `title`), then stable classes, then simple structure (`nth-of-type`/`nth-child`), then text content XPath, then Absolute XPath, and finally tag name. Attempts to ignore dynamic/unstable IDs and common state/framework classes.
-    * **Screenshots:** Includes commands to save a PNG screenshot after each recorded action step (and after initial navigation) into a `selenium_screenshots` subfolder. Also saves screenshots on errors.
-    * **Pauses:** Translates recorded "Pause" actions into `time.sleep()` commands in the script.
-    * **JS Click Fallback:** Includes a fallback to use JavaScript to click elements if the standard Selenium click is intercepted.
-    * **Configurable Pause:** Adds a 3-second pause (`time.sleep(3)`) between other steps in the generated script.
-* **Recording Control:** Provides options to "Save & Export" the recording, "Cancel & Exit" to discard it, and delete individual steps.
+* **Selenium Script Generation:** Automatically generates a Python script using the `selenium-webdriver` library based on the recorded actions. Selectors prioritize unique IDs, falling back to Absolute XPath if no unique ID is found.
+* **Recording Control:** Provides options to "Save & Export" the recording or "Cancel & Exit" to discard it.
 * **ZIP Export:** Packages the generated Python script and all captured HTML files into a single downloadable ZIP archive.
 * **Manifest V3:** Built using the modern Chrome extension platform.
 
@@ -27,7 +20,7 @@ Selenium Recorder is a Google Chrome browser extension designed to simplify the 
 | :--------------- | :------------------------------------------------------------- |
 | `manifest.json`  | Extension configuration and permissions                        |
 | `background.js`  | Service worker (handles state, script generation, export)      |
-| `content.js`     | Injected into webpage to capture events & generate selectors   |
+| `content.js`     | Injected into webpage to capture events                        |
 | `popup.html`     | UI for the extension's toolbar button popup                    |
 | `popup.js`       | Logic for the popup                                            |
 | `sidepanel.html` | UI for the side panel (displays actions, controls)             |
@@ -48,50 +41,44 @@ Selenium Recorder is a Google Chrome browser extension designed to simplify the 
 1.  **Navigate:** Go to the webpage where you want to start recording interactions.
 2.  **Start Recording:** Click the Selenium Recorder extension icon in the Chrome toolbar. In the popup that appears, click the "Start Recording" button.
 3.  **Side Panel Opens:** The browser's side panel should open, displaying the recording interface.
-4.  **Interact:** Perform actions on the webpage (click elements, type into text fields and then click away/tab out, select options from dropdowns). These actions should appear sequentially in the side panel list, indicating the selector type used (e.g., `(CSS):`, `(XPath):`). If a click opens a new tab/window, recording will automatically continue in the new tab (a "Switch Tab" action will be logged).
-5.  **Add Pause (Optional):** Enter a duration (in seconds) into the "Pause (sec)" input field in the side panel and click "Add Pause" to insert a wait step into the recording.
-6.  **Delete Step (Optional):** Click the `✕` button next to any recorded step in the side panel to remove it from the recording. Step numbers will be automatically adjusted.
-7.  **Capture HTML (Optional):** At any point during the recording, click the "Capture HTML (X)" button in the side panel to save a snapshot of the current page's HTML source. A confirmation entry ("HTML Capture Completed") will appear in the actions list. The count in the button label will update.
-8.  **Finish Recording:**
+4.  **Interact:** Perform actions on the webpage (click elements, type into text fields and then click away/tab out, select options from dropdowns). These actions should appear sequentially in the side panel list.
+5.  **Capture HTML (Optional):** At any point during the recording, click the "Capture HTML (X)" button in the side panel to save a snapshot of the current page's HTML source. A confirmation entry ("HTML Capture Completed") will appear in the actions list. The count in the button label will update.
+6.  **Finish Recording:**
     * **Save:** Click the "Save & Export" button to generate the script and ZIP file. You'll be prompted to save the `selenium_recording.zip` file. The recording stops.
     * **Cancel:** Click the "Cancel & Exit" button to discard the current recording and close the side panel. No file will be generated.
-9.  **Extract & Use (If Saved):** Extract the contents of the ZIP file. You will find:
+7.  **Extract & Use (If Saved):** Extract the contents of the ZIP file. You will find:
     * `selenium_script.py`: The generated Python Selenium script.
     * `capture_1.html`, `capture_2.html`, etc.: The HTML snapshots you captured (if any).
-    * A `selenium_screenshots` folder will be created in the directory where you run the Python script, containing PNG screenshots for each step and any errors.
-10. **Run Script:** To run the Python script, you need Python and `selenium` installed (`pip install selenium`), along with the appropriate WebDriver (e.g., ChromeDriver) accessible in your system's PATH or specified in the script. **Note:** You may need to manually add `driver.switch_to.window(...)` commands if your recording involved new tabs/windows.
+8.  **Run Script:** To run the Python script, you need Python and `selenium` installed (`pip install selenium`), along with the appropriate WebDriver (e.g., ChromeDriver) accessible in your system's PATH or specified in the script.
 
 ## Technical Details
 
 * **Manifest Version:** Manifest V3
-* **Selector Strategy:** Prioritizes unique & stable `id`, then attributes (`name`, `data-testid`, `role`, `title`), then stable `class` combinations, then simple structure (`nth-of-type`/`nth-child`), then text content XPath, and finally Absolute XPath as a fallback. Attempts to ignore dynamic/unstable IDs and common state/framework classes.
+* **Selector Strategy:** Prioritizes unique element `id`. If no unique `id` is found, it falls back to generating an Absolute XPath. As a last resort, it uses the tag name.
 * **Key Chrome APIs:**
     * `chrome.sidePanel`: For displaying the recording UI.
     * `chrome.scripting`: For injecting the content script (`content.js`).
     * `chrome.runtime`: For messaging between extension components.
-    * `chrome.tabs`: For querying tab information, detecting new tabs, and sending messages.
+    * `chrome.tabs`: For querying tab information and sending messages to content scripts.
     * `chrome.downloads`: For initiating the ZIP file download.
 * **Libraries:**
     * [JSZip](https://stuk.github.io/jszip/): Used client-side in the background script to create the ZIP archive.
 
 ## Limitations & Known Issues
 
-* **No Window Switching in Script:** While recording *continues* in new tabs/windows opened from the recorded tab, the generated Selenium script **does not** currently include the necessary `driver.switch_to.window(...)` commands to replicate this switching during playback. This will cause scripts involving popups to fail without manual modification.
-* **Selector Robustness:** While the strategy attempts to find stable selectors, it may still fall back to Absolute XPath or text-based XPath, which can be **brittle**. Any change in page structure or text content between recording and playback can cause these selectors to fail. Dynamic IDs/classes not caught by the filtering logic can also cause CSS selectors to fail. Manually adjusting selectors in the generated script is often necessary for complex or frequently changing websites. **Relative selectors are not generated.**
-* **No Automatic Waits (Beyond Basic):** The generated script includes basic explicit waits (`WebDriverWait` for element presence/clickability) before each action and fixed `time.sleep()` pauses after actions (including custom pauses). It doesn't intelligently add waits based on application state changes or asynchronous operations. More specific `WebDriverWait` conditions might need to be added manually.
-* **Limited Event Recording:** Only clicks, final text inputs (on change/blur), select dropdown changes, and manual pauses are currently recorded. Other events like hover, drag-and-drop, keyboard shortcuts, etc., are not captured.
+* **Selector Robustness:** While unique IDs are preferred, the fallback Absolute XPath strategy is inherently **brittle**. Any change in the page structure between recording and playback can cause the XPath to fail. Manually adjusting selectors in the generated script might still be necessary for complex or frequently changing websites.
+* **No Automatic Waits (Beyond Basic):** The generated script includes basic explicit waits (`WebDriverWait` for element presence/clickability) before each action, but it doesn't intelligently add waits based on application state changes or asynchronous operations triggered by actions. Longer `time.sleep()` pauses or more specific `WebDriverWait` conditions might need to be added manually, especially if actions depend on elements loading after a previous step.
+* **No Navigation Handling in Script:** While recording *continues* if you navigate within the same tab, the generated Selenium script *does not* include `driver.get()` or other commands to perform those navigations. It only starts at the initial URL and executes all recorded actions sequentially. This will likely cause scripts recorded across multiple pages to fail without manual modification.
+* **Limited Event Recording:** Only clicks, final text inputs (on change/blur), and select dropdown changes are currently recorded. Other events like hover, drag-and-drop, keyboard shortcuts, etc., are not captured.
 * **iFrame Support:** Recording interactions within iFrames is not explicitly supported and may not work correctly.
-* **Shadow DOM:** Interactions within Shadow DOM elements are not supported.
-* **Context Invalidation:** Clicking elements that cause immediate navigation might prevent that final click action from being recorded due to the browser context being invalidated before the message can be sent.
 
 ## Potential Future Enhancements
 
-* Implement generation of `driver.switch_to.window()` commands for recorded tab switches.
-* Implement more robust relative XPath or CSS selector strategies.
+* Implement more robust relative XPath or CSS selector strategies as alternatives.
 * Record navigation events and generate corresponding `driver.get()` commands.
 * Introduce options for adding explicit waits or assertions during recording.
 * Record a wider range of browser events (hover, right-click, keyboard events).
-* Allow editing or deleting recorded steps before export (Delete is implemented, Edit is not).
-* Add configuration options (e.g., preferred selector strategy, default wait times, screenshot options).
-* Improve handling of dynamic elements beyond basic filtering.
-* Add support for iFrames and Shadow DOM.
+* Allow editing or deleting recorded steps before export.
+* Add configuration options (e.g., preferred selector strategy, default wait times).
+* Improve handling of dynamic elements and waits.
+

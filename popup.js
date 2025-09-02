@@ -2,7 +2,7 @@
  * popup.js
  * Handles the logic for the extension's popup window.
  * Allows the user to start a recording session.
- * *** Opens the side panel globally for the current window. ***
+ * *** Now also handles opening the side panel directly on user gesture. ***
  */
 
 const startRecordingBtn = document.getElementById('startRecordingBtn');
@@ -19,7 +19,7 @@ chrome.runtime.sendMessage({ command: "get_status" }, (response) => {
     if (response && response.isRecording) {
         startRecordingBtn.textContent = "Recording...";
         startRecordingBtn.disabled = true;
-        statusMessage.textContent = "Recording in progress in this window."; // Adjusted message
+        statusMessage.textContent = "Recording in progress in another tab.";
     } else {
         startRecordingBtn.textContent = "Start Recording";
         startRecordingBtn.disabled = false;
@@ -32,51 +32,52 @@ startRecordingBtn.addEventListener('click', async () => {
     startRecordingBtn.disabled = true;
 
     try {
-        // 1. Get the current active tab AND window
+        // 1. Get the current active tab
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tabs || tabs.length === 0) {
             throw new Error("Could not find active tab.");
         }
         const currentTab = tabs[0];
-        if (!currentTab.id || !currentTab.windowId || !currentTab.url || currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('about:')) {
-             throw new Error("Cannot record on this type of page or get window ID.");
+        if (!currentTab.id || !currentTab.url || currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('about:')) {
+             throw new Error("Cannot record on this type of page.");
         }
         const tabId = currentTab.id;
-        const windowId = currentTab.windowId; // Get window ID
-        console.log(`Popup: Target Tab ID: ${tabId}, Window ID: ${windowId}`);
+        console.log(`Popup: Target Tab ID: ${tabId}`);
 
-        // 2. Configure and open the side panel GLOBALLY for the window
+        // 2. Configure and open the side panel for the specific tab
+        //    This happens directly in response to the click.
         await chrome.sidePanel.setOptions({
-            // tabId: tabId, // Remove tabId to make it global for the window
+            tabId: tabId,
             path: 'sidepanel.html',
             enabled: true
         });
-        console.log("Popup: Global side panel options set.");
+        console.log("Popup: Side panel options set.");
 
-        // Open the panel in the context of the window
-        await chrome.sidePanel.open({ windowId: windowId });
-        console.log("Popup: Side panel open command issued for window.");
+        await chrome.sidePanel.open({ tabId: tabId });
+        console.log("Popup: Side panel open command issued.");
 
-        // 3. Send message to background script to start recording logic
-        //    Include both tabId (as starting point) and windowId
-        chrome.runtime.sendMessage({ command: "start_recording", data: { tabId: tabId, windowId: windowId, url: currentTab.url } }, (response) => {
+        // 3. Send message to background script to ACTUALLY start recording logic
+        //    The background script no longer needs to open the panel itself.
+        chrome.runtime.sendMessage({ command: "start_recording", data: { tabId: tabId, url: currentTab.url } }, (response) => {
             if (chrome.runtime.lastError) {
                 console.error("Popup: Error sending start_recording message:", chrome.runtime.lastError.message);
                 statusMessage.textContent = `Error starting: ${chrome.runtime.lastError.message}`;
-                startRecordingBtn.disabled = false;
+                // Should we try to close the panel here? Maybe not, let user handle it.
+                startRecordingBtn.disabled = false; // Re-enable button on error
             } else if (response && response.success) {
                 statusMessage.textContent = "Recording started!";
                 startRecordingBtn.textContent = "Recording...";
-                // window.close(); // Optionally close popup
+                // Optionally close the popup window after starting successfully
+                // window.close();
             } else {
                 statusMessage.textContent = response?.message || "Failed to start recording (background error).";
-                startRecordingBtn.disabled = false;
+                startRecordingBtn.disabled = false; // Re-enable on failure
             }
         });
 
     } catch (error) {
         console.error("Popup: Error during startup:", error);
         statusMessage.textContent = `Error: ${error.message}`;
-        startRecordingBtn.disabled = false;
+        startRecordingBtn.disabled = false; // Re-enable button on error
     }
 });

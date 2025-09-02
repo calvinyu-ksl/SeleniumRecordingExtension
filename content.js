@@ -6,10 +6,11 @@
  * *** Selector Strategy: ID -> Attributes -> Stable Classes -> Structure -> Text XPath -> Absolute XPath -> Tag Name. ***
  */
 
-console.log("Selenium Recorder: Content script injected (v12 - text content xpath).");
+console.log("Selenium Recorder: Content script injected (v13 - improved class selectors).");
 
 // --- State ---
 let isListenerAttached = false;
+let clickTimeout = null; // Used to debounce rapid click events
 
 // --- Helper Functions ---
 
@@ -74,7 +75,7 @@ function generateAbsoluteXPath(element) {
 
 /**
  * Generates a CSS or XPath selector for a given HTML element.
- * Prioritization: ID -> Name -> data-testid -> role -> title -> Stable Class(es) -> Simple Structure -> Text Content XPath -> Absolute XPath -> Basic TagName.
+ * Prioritization: ID -> Name -> data-testid -> role -> title -> Combined Class + Structure -> Text XPath -> Absolute XPath -> Basic TagName.
  * Returns XPath selectors prefixed with "xpath=".
  * @param {Element} el The target HTML element.
  * @returns {string|null} A selector string (CSS or XPath) or null.
@@ -143,7 +144,8 @@ function generateRobustSelector(el) {
          } catch (e) { /* ignore */ }
      }
 
-    // 6. Stable Class names
+    // 6. Combined Class & Structure Selector
+    let baseSelector = tagName;
     if (el.classList && el.classList.length > 0) {
         const forbiddenClassesRegex = /^(?:active|focus|hover|selected|checked|disabled|visited|focus-within|focus-visible|focusNow|open|opened|closed|collapsed|expanded|js-|ng-|is-|has-|ui-|data-v-|aria-)/i;
         const stableClasses = Array.from(el.classList)
@@ -151,44 +153,53 @@ function generateRobustSelector(el) {
             .filter(c => c && !forbiddenClassesRegex.test(c) && /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(c));
 
         if (stableClasses.length > 0) {
-            const fullClassSelector = `${tagName}.${stableClasses.map(c => CSS.escape(c)).join('.')}`;
-            try {
-                if (document.querySelectorAll(fullClassSelector).length === 1) return fullClassSelector;
-            } catch (e) { /* ignore */ }
-
-             stableClasses.sort((a, b) => a.length - b.length);
-             for (const stableClass of stableClasses) {
-                  const singleClassSelector = `${tagName}.${CSS.escape(stableClass)}`;
-                  try {
-                      if (document.querySelectorAll(singleClassSelector).length === 1) return singleClassSelector;
-                  } catch(e) { /* ignore */ }
-             }
+            baseSelector += `.${stableClasses.map(c => CSS.escape(c)).join('.')}`;
         }
     }
 
-    // 7. Simplified Structure (CSS: nth-of-type / nth-child)
     try {
+        // First, try the base selector (tag + classes) on its own. This is the most common and robust case.
+        if (document.querySelectorAll(baseSelector).length === 1) {
+            return baseSelector;
+        }
+
+        // If not unique, try to make it unique with a structural pseudo-class.
         if (el.parentNode) {
+            // Try with :nth-of-type
             let siblingOfType = el;
             let typeIndex = 1;
             while ((siblingOfType = siblingOfType.previousElementSibling)) {
-                if (siblingOfType.tagName === el.tagName) typeIndex++;
+                // We only increment the index if the sibling matches the base selector,
+                // making it a true "nth-of-type-with-classes"
+                if (siblingOfType.matches(baseSelector)) {
+                    typeIndex++;
+                }
             }
-            const nthOfTypeSelector = `${tagName}:nth-of-type(${typeIndex})`;
-            if (document.querySelectorAll(nthOfTypeSelector).length === 1) return nthOfTypeSelector;
+             // Check if this is the only element of its type that matches the base selector
+            const parentNthOfTypeSelector = `:scope > ${baseSelector}`;
+            if (el.parentNode.querySelectorAll(parentNthOfTypeSelector).length > 1) {
+                 const nthOfTypeSelector = `${baseSelector}:nth-of-type(${typeIndex})`;
+                 if (document.querySelectorAll(nthOfTypeSelector).length === 1) {
+                     return nthOfTypeSelector;
+                 }
+            }
 
+
+            // If that fails, try with :nth-child
             let siblingChild = el;
             let childIndex = 1;
             while ((siblingChild = siblingChild.previousElementSibling)) {
                 childIndex++;
             }
-            const nthChildSelector = `${tagName}:nth-child(${childIndex})`;
-             if (document.querySelectorAll(nthChildSelector).length === 1) return nthChildSelector;
+            const nthChildSelector = `${baseSelector}:nth-child(${childIndex})`;
+            if (document.querySelectorAll(nthChildSelector).length === 1) {
+                return nthChildSelector;
+            }
         }
-    } catch(e) { console.warn("Error during simplified structure generation:", e) }
+    } catch(e) { console.warn("Error during combined class/structure selector generation:", e) }
 
-    // *** NEW Step 8: Text Content XPath ***
-    // Only attempt for specific tags likely to have meaningful text
+
+    // 7. Text Content XPath (Fallback)
     const tagsForTextCheck = ['a', 'button', 'span', 'div', 'label', 'legend', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'td', 'th'];
     if (tagsForTextCheck.includes(tagName)) {
         let text = el.textContent?.trim() || '';
@@ -205,20 +216,11 @@ function generateRobustSelector(el) {
                       console.warn(`generateRobustSelector: Falling back to Text Content XPath (exact match) for element:`, el);
                       return `xpath=${textXPath}`;
                  }
-
-                 // If exact match fails, try contains() - more lenient but less precise
-                 // textXPath = `//${tagName}[contains(normalize-space(), ${escapedText})]`;
-                 // if (document.evaluate(`count(${textXPath})`, document, null, XPathResult.NUMBER_TYPE, null).numberValue === 1) {
-                 //      console.warn(`generateRobustSelector: Falling back to Text Content XPath (contains match) for element:`, el);
-                 //      return `xpath=${textXPath}`;
-                 // }
-                 // Self-correction: contains() is often too broad, stick to exact match for now.
-
              } catch (e) { console.warn("Error evaluating text XPath:", e); }
         }
     }
 
-    // 9. Absolute XPath Fallback
+    // 8. Absolute XPath Fallback
     try {
         const absXPath = generateAbsoluteXPath(el);
         if (absXPath) {
@@ -230,7 +232,7 @@ function generateRobustSelector(el) {
     } catch(e) { console.warn("Error during Absolute XPath generation:", e) }
 
 
-    // 10. Absolute Fallback: Tag Name (CSS)
+    // 9. Absolute Fallback: Tag Name (CSS)
     console.error(`generateRobustSelector: CRITICAL FALLBACK to basic tag name for element:`, el);
     return tagName;
 }
@@ -255,48 +257,72 @@ function getElementInfo(element) {
 // --- Event Handlers ---
 
 /**
- * Handles click events on the page.
+ * Handles click events on the page. Debounces rapid clicks to capture only the most specific one.
  * @param {Event} event
  */
 function handleClick(event) {
-    const targetElement = event.target;
-    // console.log("handleClick: Click detected on element:", targetElement); // Optional debug
-    const selector = generateRobustSelector(targetElement);
-
-    if (!selector) {
-        console.error("handleClick: Could not generate any selector for clicked element:", targetElement);
+    // If a click is already scheduled to be recorded, ignore this one.
+    // This handles event bubbling or synthetic events where a single user
+    // action triggers clicks on both a child and a parent element.
+    // We assume the first event's target is the most specific element the user intended to click.
+    if (clickTimeout) {
         return;
     }
 
-    const actionData = {
-        type: 'Click',
-        selector: selector,
-        timestamp: Date.now()
-    };
+    let targetElement = event.target;
 
-    console.log("handleClick: Action recorded (Content):", actionData);
-    try {
-        chrome.runtime.sendMessage({ command: "record_action", data: actionData })
-            .catch(error => {
-                if (error.message && !error.message.includes("Extension context invalidated") && !error.message.includes("message port closed")) {
-                    console.error("handleClick: Error sending click action message:", error);
-                } else {
-                    // console.log("handleClick: Context invalidated during message send (expected on navigation click)."); // Optional debug
-                }
-            });
-    } catch (error) {
-         if (error.message && !error.message.includes("Extension context invalidated")) {
-            console.error("handleClick: Synchronous error sending click action:", error);
-         } else {
-             // console.log("handleClick: Context invalidated during message send (expected on navigation click)."); // Optional debug
-         }
+    // If the user clicks on an element inside a button or link (like a span or icon),
+    // we should record the action on the parent button/link, as that's the actionable element.
+    const actionableParent = targetElement.closest('button, a, [role="button"], [role="link"], input[type="submit"], input[type="button"]');
+    if (actionableParent && actionableParent.contains(targetElement)) {
+        console.log("handleClick: Click target is inside an actionable parent. Using parent.", actionableParent);
+        targetElement = actionableParent;
     }
+
+
+    // Set a timeout to record this action. If another click happens on a parent element
+    // due to bubbling, the `if (clickTimeout)` check above will prevent it from being recorded.
+    clickTimeout = setTimeout(() => {
+        try {
+            // Clicks on checkboxes are handled by the 'change' event to capture the state correctly.
+            if (targetElement.tagName.toLowerCase() === 'input' && targetElement.type === 'checkbox') {
+                return;
+            }
+            
+            const selector = generateRobustSelector(targetElement);
+
+            if (!selector) {
+                console.error("handleClick: Could not generate any selector for clicked element:", targetElement);
+                return;
+            }
+
+            const actionData = {
+                type: 'Click',
+                selector: selector,
+                timestamp: Date.now()
+            };
+
+            console.log("handleClick: Action recorded (Content):", actionData);
+            chrome.runtime.sendMessage({ command: "record_action", data: actionData })
+                .catch(error => {
+                    if (error.message && !error.message.includes("Extension context invalidated") && !error.message.includes("message port closed")) {
+                        console.error("handleClick: Error sending click action message:", error);
+                    }
+                });
+        } catch (error) {
+             if (error.message && !error.message.includes("Extension context invalidated")) {
+                console.error("handleClick: Synchronous error sending click action:", error);
+             }
+        } finally {
+            clickTimeout = null; // Reset timeout after processing
+        }
+    }, 50); // A 50ms debounce window is usually sufficient
 }
 
 
 /**
  * Handles change events for <select>, <input>, and <textarea> elements.
- * Captures the final value after modification and blur (usually).
+ * Captures the final value after modification.
  * @param {Event} event
  */
 function handleChange(event) {
@@ -305,14 +331,14 @@ function handleChange(event) {
     let actionData = null;
 
     // console.log(`handleChange: Detected change on <${tagName}>`, targetElement); // Optional debug
+    const selector = generateRobustSelector(targetElement);
+    if (!selector) {
+        console.warn(`handleChange: Could not generate selector for <${tagName}> element:`, targetElement);
+        return;
+    }
 
     // Handle <select> elements
     if (tagName === 'select') {
-        const selector = generateRobustSelector(targetElement);
-        if (!selector) {
-            console.warn("handleChange: Could not generate selector for select element:", targetElement);
-            return;
-        }
         actionData = {
             type: 'Select',
             selector: selector,
@@ -320,13 +346,17 @@ function handleChange(event) {
             timestamp: Date.now()
         };
     }
+    // Handle <input type="checkbox">
+    else if (tagName === 'input' && targetElement.type === 'checkbox') {
+        actionData = {
+            type: 'Checkbox',
+            selector: selector,
+            value: targetElement.checked, // The final state (true/false)
+            timestamp: Date.now()
+        };
+    }
     // Handle <input> (text-like) and <textarea> elements
     else if ((tagName === 'input' && /text|password|search|email|url|tel|number/.test(targetElement.type)) || tagName === 'textarea') {
-         const selector = generateRobustSelector(targetElement);
-         if (!selector) {
-            console.warn("handleChange: Could not generate selector for input/textarea element:", targetElement);
-            return;
-         }
          actionData = {
             type: 'Input',
             selector: selector,
