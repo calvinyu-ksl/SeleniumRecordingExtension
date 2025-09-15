@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>Recorder 測試頁面</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; padding: 18px; }
+    section { margin-bottom: 18px; }
+    label { display:block; margin:6px 0 3px; }
+    .controls { background:#f7f7f7; padding:12px; border-radius:6px; }
+    #state { font-family:monospace; color:#222; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h2>測試控件 (Dropdown / Textarea / Checkbox / Radio)</h2>
+
+
+  <div style="position:relative;display:inline-block;width:300px;">
+    <input
+      type="search"
+      autocomplete="off"
+      class="ant-select-selection-search-input"
+      role="combobox"
+      aria-expanded="false"
+      aria-haspopup="listbox"
+      aria-owns="rc_select_0_list"
+      aria-autocomplete="list"
+      aria-controls="rc_select_0_list"
+      value=""
+      id="rc_select_0"
+      placeholder="請輸入關鍵字..."
+      style="width:100%;box-sizing:border-box;"
+      oninput="showDropdown()"
+      onfocus="showDropdown()"
+      onblur="setTimeout(hideDropdown,200)"
+    />
+    <ul id="rc_select_0_list" style="display:none;position:absolute;top:100%;left:0;width:100%;background:#fff;border:1px solid #ccc;z-index:10;list-style:none;margin:0;padding:0;max-height:160px;overflow:auto;">
+    </ul>
+  </div>
+  <script>
+    const options = ['蘋果', '香蕉', '葡萄', '測試資料123', '橘子', '西瓜', '芒果'];
+    const inputEl = document.getElementById('rc_select_0');
+    const listEl = document.getElementById('rc_select_0_list');
+    function showDropdown() {
+      const val = inputEl.value.trim();
+      const filtered = val ? options.filter(o => o.includes(val)) : options;
+      listEl.innerHTML = filtered.length ? filtered.map(o => `<li style='padding:8px;cursor:pointer;' onclick='selectOption("${o}")'>${o}</li>`).join('') : `<li style='padding:8px;color:#999;'>無符合選項</li>`;
+      listEl.style.display = filtered.length ? 'block' : 'none';
+    }
+    function selectOption(val) {
+      inputEl.value = val;
+      hideDropdown();
+    }
+    function hideDropdown() {
+      listEl.style.display = 'none';
+    }
+  </script>
+  <section class="controls">
+    <label for="singleSelect">單選下拉 (select)</label>
+    <select id="singleSelect">
+      <option value="">-- 請選擇 --</option>
+      <option value="opt_1">選項 1</option>
+      <option value="opt_2">選項 2</option>
+      <option value="opt_3">選項 3</option>
+    </select>
+
+    <label for="multiSelect">多選下拉 (multiple)</label>
+    <select id="multiSelect" multiple size="4">
+      <option value="m1">多選 1</option>
+      <option value="m2">多選 2</option>
+      <option value="m3">多選 3</option>
+      <option value="m4">多選 4</option>
+    </select>
+  </section>
+
+  <section class="controls">
+    <label for="theTextarea">文字區 (textarea)</label>
+    <textarea id="theTextarea" rows="4" cols="60" placeholder="在這輸入文字，按 Enter 或 blur 測試"></textarea>
+    <div style="margin-top:8px;">
+      <button id="fillText">自動填入文字</button>
+      <button id="clearText">清除文字</button>
+    </div>
+  </section>
+
+  <section class="controls">
+    <label>Checkbox</label>
+    <input type="checkbox" id="chkAgree"> <label for="chkAgree" style="display:inline">我已閱讀並同意</label>
+
+    <div style="margin-top:8px">
+      <label>Radio 選項 (性別)</label>
+      <input type="radio" id="r_male" name="gender" value="male"> <label for="r_male" style="display:inline">男性</label>
+      <input type="radio" id="r_female" name="gender" value="female"> <label for="r_female" style="display:inline">女性</label>
+      <input type="radio" id="r_other" name="gender" value="other"> <label for="r_other" style="display:inline">其他</label>
+    </div>
+  </section>
+
+  <section class="controls">
+    <label>Dialogs & Screen Recording (existing)</label>
+    <button id="alertBtn">顯示 Alert</button>
+    <button id="promptBtn">顯示 Prompt</button>
+    <button id="confirmBtn">顯示 Confirm</button>
+    <button id="recordBtn">開始錄屏 (5s)</button>
+    <div id="result"></div>
+  </section>
+
+  <section class="controls">
+    <label>當前狀態 (方便觀察)</label>
+    <div id="state">尚未互動</div>
+  </section>
+
+  <script>
+    // Screen recording helper (keeps previous behavior)
+    async function startScreenRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+
+        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'screen_recording.webm'; a.click(); URL.revokeObjectURL(url);
+        };
+        recorder.start();
+        setTimeout(() => recorder.stop(), 5000);
+      } catch (err) { alert('錄屏失敗: ' + err); }
+    }
+
+    // Elements
+    const singleSelect = document.getElementById('singleSelect');
+    const multiSelect = document.getElementById('multiSelect');
+    const theTextarea = document.getElementById('theTextarea');
+    const chkAgree = document.getElementById('chkAgree');
+    const stateEl = document.getElementById('state');
+    const resultEl = document.getElementById('result');
+
+    // Buttons
+    document.getElementById('recordBtn').addEventListener('click', startScreenRecording);
+    document.getElementById('alertBtn').addEventListener('click', () => { alert('這是 Alert 視窗'); resultEl.textContent = 'Alert 已顯示'; });
+    document.getElementById('promptBtn').addEventListener('click', () => { const v = prompt('請輸入一些文字:', '預設值'); resultEl.textContent = v === null ? 'Prompt 被取消' : `Prompt 輸入: ${v}`; });
+    document.getElementById('confirmBtn').addEventListener('click', () => { const ok = confirm('是否確認這個動作?'); resultEl.textContent = ok ? 'Confirm: 使用者按下確定' : 'Confirm: 使用者按下取消'; });
+
+    // Helper actions for textarea
+    document.getElementById('fillText').addEventListener('click', () => { theTextarea.value = '這是一段測試文字。'; theTextarea.dispatchEvent(new Event('input', { bubbles: true })); stateUpdate(); });
+    document.getElementById('clearText').addEventListener('click', () => { theTextarea.value = ''; theTextarea.dispatchEvent(new Event('input', { bubbles: true })); stateUpdate(); });
+
+    // Update status display when controls change
+    function stateUpdate() {
+      const sel = singleSelect.value || '(未選擇)';
+      const multi = Array.from(multiSelect.selectedOptions).map(o => o.value).join(', ') || '(無)';
+      const txt = theTextarea.value || '(空)';
+      const chk = chkAgree.checked ? '已勾選' : '未勾選';
+      const radios = document.querySelector('input[name="gender"]:checked');
+      const radioVal = radios ? radios.value : '(未選擇)';
+      stateEl.textContent = `select=${sel} | multi=[${multi}] | textarea="${txt}" | checkbox=${chk} | radio=${radioVal}`;
+    }
+
+    // Attach change/input listeners to reflect changes and to make it easy to trace recordings
+    singleSelect.addEventListener('change', () => { stateUpdate(); });
+    multiSelect.addEventListener('change', () => { stateUpdate(); });
+    theTextarea.addEventListener('input', () => { stateUpdate(); });
+    chkAgree.addEventListener('change', () => { stateUpdate(); });
+    document.querySelectorAll('input[name="gender"]').forEach(r => r.addEventListener('change', () => { stateUpdate(); }));
+
+    // Initialize
+    stateUpdate();
+
+    // Set initial values as per the suggested change
+    document.getElementById('rc_select_0').value = '範例搜尋';
+    document.getElementById('singleSelect').value = 'opt_2';
+    document.getElementById('multiSelect').selectedOptions[0].selected = true;
+    document.getElementById('multiSelect').selectedOptions[1].selected = true;
+    document.getElementById('theTextarea').value = '這是範例文字，供測試用。';
+    document.getElementById('chkAgree').checked = true;
+    stateUpdate();  // Update state to reflect these changes
+  </script>
+</body>
+</html>
