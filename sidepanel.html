@@ -237,6 +237,19 @@
             background-color: var(--danger-hover);
         }
 
+        /* Screen record button styles */
+        #screen-record-button {
+            width:100%;
+            background:linear-gradient(135deg,#ff4757,#e84118);
+            color:#fff;
+            margin-bottom:8px;
+            font-weight:700;
+            position:relative;
+        }
+        #screen-record-button:not(:disabled):hover { background:linear-gradient(135deg,#ff5f6d,#ff2e43); }
+        #screen-record-button.recording { background:linear-gradient(135deg,#2ecc71,#27ae60); }
+        #screen-record-button.recording:not(:disabled):hover { background:linear-gradient(135deg,#34d67b,#2fba69); }
+        #screen-record-button .timer { font-weight:600; margin-left:6px; }
     </style>
 </head>
 <body>
@@ -259,7 +272,9 @@
 
     <div class="footer">
          <div class="manual-capture">
+            <button id="screen-record-button">Start Screen Recording</button>
             <button id="capture-html-button" disabled>Capture HTML Manually</button>
+            <button id="full-browser-shot-button" disabled style="margin-top:8px;background:#444;color:#fff;width:100%;">Full Browser Screenshot</button>
         </div>
         <div class="button-group">
             <button id="cancel-button" disabled>Cancel & Discard</button>

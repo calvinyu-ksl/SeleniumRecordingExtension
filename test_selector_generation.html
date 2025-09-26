@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>測試選擇器生成</title>
+</head>
+<body>
+    <h1>測試選擇器生成</h1>
+    
+    <div class="container" id="container">
+        <div class="column" data-dnd-kit-droppable="column-1" data-sortable-container="todo">
+            <h3>To Do</h3>
+            <div class="drop-zone" data-dnd-kit-drop-zone="todo-zone">Drop items here</div>
+            <div class="draggable-item" 
+                 data-dnd-kit-id="item-1" 
+                 data-sortable-id="task-1"
+                 draggable="false"
+                 role="button"
+                 aria-roledescription="draggable">
+                <div class="item-content">Setup project repository</div>
+                <div class="item-id">ID: item-1</div>
+            </div>
+        </div>
+
+        <div class="column" data-dnd-kit-droppable="column-2" data-sortable-container="progress">
+            <h3>In Progress</h3>
+            <div class="drop-zone" data-dnd-kit-drop-zone="progress-zone">Drop items here</div>
+        </div>
+    </div>
+
+    <script>
+        console.log('頁面載入完成，等待擴展測試...');
+        
+        // 測試函數
+        window.testSelectorGeneration = function() {
+            const item = document.querySelector('[data-dnd-kit-id="item-1"]');
+            const column1 = document.querySelector('[data-dnd-kit-droppable="column-1"]');
+            const column2 = document.querySelector('[data-dnd-kit-droppable="column-2"]');
+            const dropZone = document.querySelector('[data-dnd-kit-drop-zone="progress-zone"]');
+            
+            console.log('測試元素:');
+            console.log('拖拽項目:', item);
+            console.log('列1:', column1);  
+            console.log('列2:', column2);
+            console.log('投放區域:', dropZone);
+            
+            // 如果content.js已載入，測試選擇器生成
+            if (typeof generateDragSelector === 'function') {
+                console.log('測試generateDragSelector函數:');
+                console.log('item-1選擇器:', generateDragSelector(item));
+                console.log('column-1選擇器:', generateDragSelector(column1));
+                console.log('column-2選擇器:', generateDragSelector(column2));
+                console.log('drop-zone選擇器:', generateDragSelector(dropZone));
+            } else {
+                console.log('generateDragSelector函數未找到，請確保擴展已載入');
+            }
+        };
+    </script>
+</body>
+</html>
