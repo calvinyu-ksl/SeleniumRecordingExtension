@@ -733,6 +733,7 @@ function handleClick(event) { // 處理點擊事件；若命中 icon/svg 會往�
         try {
             const abs = generateAbsoluteXPath(targetForSelector);
             selector = abs ? trimNonInteractiveXPathTail(abs) : null;
+            console.log(`Content: Generated click selector for element:`, targetForSelector, `selector: ${selector}`);
         } catch (e) { selector = null; }
         if (!selector) return; // 無法產生 XPath 就略過
         const anchorSelector = anchorEl ? (function () { const a = generateAbsoluteXPath(anchorEl); return a ? trimNonInteractiveXPathTail(a) : null; })() : null;

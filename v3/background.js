@@ -532,6 +532,14 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         }
         const action = item.data;
         let selector = action.selector || '';
+        
+        // Global fix for div structure issue - apply to all action types
+        if (selector.includes('/div[2]/div[2]/form/')) {
+            console.log(`Background: Found incorrect div structure in ${action.type}, fixing selector: ${selector}`);
+            selector = selector.replace('/div[2]/div[2]/form/', '/div/div[2]/form/');
+            console.log(`Background: Corrected selector to: ${selector}`);
+        }
+        
         const selectorQuote = selector.includes("'") ? '"' : "'";
         const finalSelector = `${selectorQuote}${selector}${selectorQuote}`;
         const nextItem = allForOutput[i + 1];
@@ -577,11 +585,15 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
                 }
                 // If XPath selector ends with '/input' or '/input[n]', strip the trailing input segment
                 let selForClick = selector;
+                console.log(`Background: Processing click selector: ${selector}`);
+                
                 if (typeof selForClick === 'string' && selForClick.startsWith('/') && /\/input(?:\[\d+\])?$/.test(selForClick)) {
                     selForClick = selForClick.replace(/\/input(?:\[\d+\])?$/, '');
+                    console.log(`Background: Modified click selector to: ${selForClick}`);
                 }
                 const q = selForClick.includes("'") ? '"' : "'";
                 const finalClickSelector = `${q}${selForClick}${q}`;
+                console.log(`Background: Final click selector with quotes: ${finalClickSelector}`);
 
                 if (isAutocompleteOptionClick) {
                     lines.push(`        self.click(${finalClickSelector})`);
