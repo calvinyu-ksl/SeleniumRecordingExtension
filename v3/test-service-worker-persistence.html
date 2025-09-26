@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>測試 Service Worker 持久化</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            font-size: 14px;
+        }
+        .instructions {
+            background-color: #f0f8ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Service Worker 持久化測試頁面</h1>
+    
+    <div class="instructions">
+        <h3>測試步驟：</h3>
+        <ol>
+            <li>開啟擴展程序並開始錄製</li>
+            <li>在這個頁面上進行一些操作（點擊按鈕、輸入文字等）</li>
+            <li>等待 30-60 秒不做任何操作（讓 Service Worker 休眠）</li>
+            <li>再次進行操作，檢查是否還能正常錄製</li>
+            <li>檢查側邊面板中的動作是否仍然存在</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h3>點擊測試</h3>
+        <button id="btn1">按鈕 1</button>
+        <button id="btn2">按鈕 2</button>
+        <button id="btn3">按鈕 3</button>
+    </div>
+
+    <div class="test-section">
+        <h3>輸入測試</h3>
+        <input type="text" id="input1" placeholder="輸入測試文字 1">
+        <input type="text" id="input2" placeholder="輸入測試文字 2">
+        <input type="email" id="email" placeholder="輸入電子郵件">
+    </div>
+
+    <div class="test-section">
+        <h3>表單測試</h3>
+        <select id="dropdown">
+            <option value="option1">選項 1</option>
+            <option value="option2">選項 2</option>
+            <option value="option3">選項 3</option>
+        </select>
+        <br><br>
+        <input type="checkbox" id="checkbox1"> 核取方塊 1
+        <input type="checkbox" id="checkbox2"> 核取方塊 2
+        <br><br>
+        <label>性別選擇：</label><br>
+        <input type="radio" name="gender" id="radio1" value="male"> 
+        <label for="radio1">男性</label><br>
+        <input type="radio" name="gender" id="radio2" value="female"> 
+        <label for="radio2">女性</label><br>
+        <input type="radio" name="gender" id="radio3" value="other"> 
+        <label for="radio3">其他</label><br><br>
+        
+        <label>年齡範圍：</label><br>
+        <input type="radio" name="age" id="age1" value="18-25"> 
+        <label for="age1">18-25歲</label><br>
+        <input type="radio" name="age" id="age2" value="26-35"> 
+        <label for="age2">26-35歲</label><br>
+        <input type="radio" name="age" id="age3" value="36-50"> 
+        <label for="age3">36-50歲</label><br>
+        <input type="radio" name="age" id="age4" value="50+"> 
+        <label for="age4">50歲以上</label>
+    </div>
+
+    <div class="test-section">
+        <h3>狀態顯示</h3>
+        <p id="status">等待操作...</p>
+        <p id="timestamp">最後操作時間: --</p>
+    </div>
+
+    <script>
+        // 添加事件監聽器來顯示操作狀態
+        const statusEl = document.getElementById('status');
+        const timestampEl = document.getElementById('timestamp');
+        
+        function updateStatus(action) {
+            statusEl.textContent = `最後操作: ${action}`;
+            timestampEl.textContent = `最後操作時間: ${new Date().toLocaleTimeString()}`;
+        }
+
+        // 按鈕點擊事件
+        document.getElementById('btn1').addEventListener('click', () => updateStatus('點擊按鈕 1'));
+        document.getElementById('btn2').addEventListener('click', () => updateStatus('點擊按鈕 2'));
+        document.getElementById('btn3').addEventListener('click', () => updateStatus('點擊按鈕 3'));
+
+        // 輸入事件
+        document.getElementById('input1').addEventListener('input', () => updateStatus('輸入文字 1'));
+        document.getElementById('input2').addEventListener('input', () => updateStatus('輸入文字 2'));
+        document.getElementById('email').addEventListener('input', () => updateStatus('輸入電子郵件'));
+
+        // 表單事件
+        document.getElementById('dropdown').addEventListener('change', () => updateStatus('選擇下拉選項'));
+        document.getElementById('checkbox1').addEventListener('change', () => updateStatus('切換核取方塊 1'));
+        document.getElementById('checkbox2').addEventListener('change', () => updateStatus('切換核取方塊 2'));
+        
+        // Radio button events
+        document.querySelectorAll('input[name="gender"]').forEach(radio => {
+            radio.addEventListener('change', (e) => updateStatus(`選擇性別: ${e.target.value}`));
+        });
+        document.querySelectorAll('input[name="age"]').forEach(radio => {
+            radio.addEventListener('change', (e) => updateStatus(`選擇年齡: ${e.target.value}`));
+        });
+
+        // 顯示頁面載入時間
+        console.log('測試頁面載入時間:', new Date().toLocaleString());
+    </script>
+</body>
+</html>

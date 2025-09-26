@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DND-Kit Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .column {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            min-height: 400px;
+            width: 21%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .column h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+
+        .draggable-item {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: grab;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .draggable-item:hover {
+            background: #e9ecef;
+            border-color: #007bff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .draggable-item.dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+            cursor: grabbing;
+        }
+
+        .drag-overlay {
+            position: fixed;
+            pointer-events: none;
+            z-index: 999;
+            background: #007bff;
+            color: white;
+            border-radius: 6px;
+            padding: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            transform: rotate(5deg);
+        }
+
+        .drop-zone {
+            min-height: 60px;
+            border: 2px dashed #dee2e6;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+            transition: all 0.2s ease;
+            margin-bottom: 8px;
+        }
+
+        .drop-zone.active {
+            border-color: #007bff;
+            background: rgba(0, 123, 255, 0.1);
+            color: #007bff;
+        }
+
+        .item-content {
+            font-weight: 500;
+        }
+
+        .item-id {
+            font-size: 0.8em;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+
+        .stats {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .add-item-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            cursor: pointer;
+            margin-bottom: 16px;
+        }
+
+        .add-item-btn:hover {
+            background: #218838;
+        }
+
+        .reset-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .reset-btn:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <h1>DND-Kit Test Environment</h1>
+    
+    <div class="stats">
+        <h3>Test Statistics</h3>
+        <p>Total Drag Operations: <span id="dragCount">0</span></p>
+        <p>Last Action: <span id="lastAction">None</span></p>
+        <button class="add-item-btn" onclick="addNewItem()">Add New Item</button>
+        <button class="reset-btn" onclick="resetItems()">Reset All</button>
+    </div>
+
+    <div class="container" id="container">
+        <div class="column" data-dnd-kit-droppable="column-1" data-sortable-container="todo">
+            <h3>To Do</h3>
+            <div class="drop-zone" data-dnd-kit-drop-zone="todo-zone">Drop items here</div>
+            <div class="draggable-item" 
+                 data-dnd-kit-id="item-1" 
+                 data-sortable-id="task-1"
+                 draggable="false"
+                 role="button"
+                 aria-roledescription="draggable">
+                <div class="item-content">Setup project repository</div>
+                <div class="item-id">ID: item-1</div>
+            </div>
+            <div class="draggable-item" 
+                 data-dnd-kit-id="item-2" 
+                 data-sortable-id="task-2"
+                 draggable="false"
+                 role="button"
+                 aria-roledescription="draggable">
+                <div class="item-content">Design user interface</div>
+                <div class="item-id">ID: item-2</div>
+            </div>
+        </div>
+
+        <div class="column" data-dnd-kit-droppable="column-2" data-sortable-container="progress">
+            <h3>In Progress</h3>
+            <div class="drop-zone" data-dnd-kit-drop-zone="progress-zone">Drop items here</div>
+            <div class="draggable-item" 
+                 data-dnd-kit-id="item-3" 
+                 data-sortable-id="task-3"
+                 draggable="false"
+                 role="button"
+                 aria-roledescription="draggable">
+                <div class="item-content">Implement drag and drop</div>
+                <div class="item-id">ID: item-3</div>
+            </div>
+        </div>
+ <div class="column" data-dnd-kit-droppable="column-3" data-sortable-container="done">
+            <h3>Done</h3>
+            <div class="drop-zone" data-dnd-kit-drop-zone="done-zone">Drop items here</div>
+            <div class="draggable-item" 
+                 data-dnd-kit-id="item-4" 
+                 data-sortable-id="task-4"
+                 draggable="false"
+                 role="button"
+                 aria-roledescription="draggable">
+                <div class="item-content">Write test cases</div>
+                <div class="item-id">ID: item-4</div>
+            </div>
+        </div>
+
+        <div class="column" data-dnd-kit-droppable="column-4" data-sortable-container="test">
+            <h3>Test</h3>
+            <div class="drop-zone" data-dnd-kit-drop-zone="test-zone">Drop items here</div>
+            <div class="draggable-item" 
+                 data-dnd-kit-id="item-5" 
+                 data-sortable-id="task-5"
+                 draggable="false"
+                 role="button"
+                 aria-roledescription="draggable">
+                <div class="item-content">Review and testing</div>
+                <div class="item-id">ID: item-5</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulated DND-Kit functionality for testing the Chrome extension
+        let dragCount = 0;
+        let currentDragElement = null;
+        let dragOverlay = null;
+        let nextItemId = 5;
+
+        // Pointer-based drag simulation (mimics DND-Kit behavior)
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('pointermove', handlePointerMove);
+        document.addEventListener('pointerup', handlePointerUp);
+
+        let isDragging = false;
+        let startCoords = null;
+        let dragThreshold = 5;
+
+        function handlePointerDown(event) {
+            const draggable = event.target.closest('[data-dnd-kit-id]');
+            if (!draggable) return;
+
+            currentDragElement = draggable;
+            startCoords = { x: event.clientX, y: event.clientY };
+            
+            // Prevent text selection
+            event.preventDefault();
+        }
+
+        function handlePointerMove(event) {
+            if (!currentDragElement || isDragging) return;
+
+            const distance = Math.sqrt(
+                Math.pow(event.clientX - startCoords.x, 2) + 
+                Math.pow(event.clientY - startCoords.y, 2)
+            );
+
+            if (distance > dragThreshold) {
+                startDrag(event);
+            }
+        }
+
+        function startDrag(event) {
+            if (!currentDragElement) return;
+
+            isDragging = true;
+            dragCount++;
+            updateStats('Drag started');
+
+            // Add dragging class
+            currentDragElement.classList.add('dragging');
+
+            // Create drag overlay (simulates DND-Kit overlay)
+            createDragOverlay();
+
+            // Highlight drop zones
+            highlightDropZones(true);
+
+            console.log('DND-Kit: Drag started', {
+                element: currentDragElement,
+                id: currentDragElement.getAttribute('data-dnd-kit-id')
+            });
+        }
+
+        function createDragOverlay() {
+            dragOverlay = document.createElement('div');
+            dragOverlay.className = 'drag-overlay';
+            dragOverlay.textContent = currentDragElement.querySelector('.item-content').textContent;
+            dragOverlay.style.left = startCoords.x + 'px';
+            dragOverlay.style.top = startCoords.y + 'px';
+            document.body.appendChild(dragOverlay);
+
+            // Follow mouse
+            document.addEventListener('pointermove', updateOverlayPosition);
+        }
+
+        function updateOverlayPosition(event) {
+            if (dragOverlay) {
+                dragOverlay.style.left = (event.clientX + 10) + 'px';
+                dragOverlay.style.top = (event.clientY + 10) + 'px';
+            }
+        }
+
+        function highlightDropZones(active) {
+            const dropZones = document.querySelectorAll('.drop-zone, [data-dnd-kit-droppable]');
+            dropZones.forEach(zone => {
+                if (active) {
+                    zone.classList.add('active');
+                } else {
+                    zone.classList.remove('active');
+                }
+            });
+        }
+
+        function handlePointerUp(event) {
+            if (!isDragging || !currentDragElement) {
+                currentDragElement = null;
+                startCoords = null;
+                return;
+            }
+
+            // Find drop target
+            const dropTarget = findDropTarget(event.clientX, event.clientY);
+            
+            if (dropTarget) {
+                performDrop(dropTarget);
+            } else {
+                cancelDrag();
+            }
+
+            cleanup();
+        }
+
+        function findDropTarget(x, y) {
+            const elements = document.elementsFromPoint(x, y);
+            
+            // Look for droppable containers
+            for (const el of elements) {
+                if (el === currentDragElement) continue;
+                
+                const droppable = el.closest('[data-dnd-kit-droppable], [data-sortable-container], .drop-zone');
+                if (droppable) {
+                    return droppable;
+                }
+            }
+            
+            return null;
+        }
+
+        function performDrop(dropTarget) {
+            const sourceId = currentDragElement.getAttribute('data-dnd-kit-id');
+            const targetId = dropTarget.getAttribute('data-dnd-kit-droppable') || 
+                           dropTarget.getAttribute('data-sortable-container') ||
+                           'unknown';
+
+            console.log('DND-Kit: Drop completed', {
+                source: sourceId,
+                target: targetId,
+                dropTarget: dropTarget
+            });
+
+            // Move element to new container
+            if (dropTarget.classList.contains('drop-zone')) {
+                // Insert after the drop zone
+                dropTarget.parentElement.insertBefore(currentDragElement, dropTarget.nextSibling);
+            } else {
+                // Append to container
+                dropTarget.appendChild(currentDragElement);
+            }
+
+            updateStats(`Moved ${sourceId} to ${targetId}`);
+
+            // Animate success
+            currentDragElement.style.animation = 'none';
+            setTimeout(() => {
+                currentDragElement.style.animation = '';
+            }, 100);
+        }
+
+        function cancelDrag() {
+            console.log('DND-Kit: Drag cancelled');
+            updateStats('Drag cancelled');
+        }
+
+        function cleanup() {
+            isDragging = false;
+            
+            if (currentDragElement) {
+                currentDragElement.classList.remove('dragging');
+                currentDragElement = null;
+            }
+
+            if (dragOverlay) {
+                document.removeEventListener('pointermove', updateOverlayPosition);
+                dragOverlay.remove();
+                dragOverlay = null;
+            }
+
+            highlightDropZones(false);
+            startCoords = null;
+        }
+
+        function updateStats(action) {
+            document.getElementById('dragCount').textContent = dragCount;
+            document.getElementById('lastAction').textContent = action;
+        }
+
+        function addNewItem() {
+            const todoColumn = document.querySelector('[data-dnd-kit-droppable="column-1"]');
+            const newItem = document.createElement('div');
+            
+            newItem.className = 'draggable-item';
+            newItem.setAttribute('data-dnd-kit-id', `item-${nextItemId}`);
+            newItem.setAttribute('data-sortable-id', `task-${nextItemId}`);
+            newItem.setAttribute('draggable', 'false');
+            newItem.setAttribute('role', 'button');
+            newItem.setAttribute('aria-roledescription', 'draggable');
+            
+            newItem.innerHTML = `
+                <div class="item-content">New Task ${nextItemId}</div>
+                <div class="item-id">ID: item-${nextItemId}</div>
+            `;
+            
+            todoColumn.appendChild(newItem);
+            nextItemId++;
+            
+            updateStats(`Added new item-${nextItemId - 1}`);
+        }
+
+        function resetItems() {
+            const todoColumn = document.querySelector('[data-dnd-kit-droppable="column-1"]');
+            const progressColumn = document.querySelector('[data-dnd-kit-droppable="column-2"]');
+            const doneColumn = document.querySelector('[data-dnd-kit-droppable="column-3"]');
+            const testColumn = document.querySelector('[data-dnd-kit-droppable="column-4"]');
+
+            // Move all items back to their original positions
+            const allItems = document.querySelectorAll('[data-dnd-kit-id]');
+            allItems.forEach((item, index) => {
+                if (index < 2) {
+                    todoColumn.appendChild(item);
+                } else if (index === 2) {
+                    progressColumn.appendChild(item);
+                } else if (index === 3) {
+                    doneColumn.appendChild(item);
+                } else {
+                    testColumn.appendChild(item);
+                }
+            });
+
+            dragCount = 0;
+            updateStats('Reset all items');
+        }
+
+        // Initialize
+        updateStats('Ready');
+        console.log('DND-Kit Test Environment initialized');
+    </script>
+</body>
+</html>
