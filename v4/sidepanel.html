@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>SeleniumBase Recorder - v2.0</title>
+    <style>
+        :root {
+            --primary-bg: #2a2a2e;
+            --secondary-bg: #3a3a40;
+            --text-color: #e0e0e0;
+            --accent-color: #4d90fe;
+            --accent-hover: #6ca5ff;
+            --danger-color: #e74c3c;
+            --danger-hover: #f16a5c;
+            --success-color: #2ecc71;
+            --border-color: #4a4a50;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            width:100%;
+            min-width: 200px;
+            max-width: 450px;
+            font-family: var(--font-family);
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .header {
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 8px 0;
+            color: var(--accent-color);
+        }
+
+        /* Mode Indicator */
+        .mode-indicator {
+            margin-bottom: 8px;
+        }
+
+        /* Hide recorder-only elements in editor mode */
+        body.editor-mode .recorder-only {
+            display: none !important;
+        }
+
+        .mode-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+        }
+
+        /* Editor Toolbar */
+        .editor-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+        }
+
+        .editor-toolbar-left {
+            display: flex;
+            gap: 8px;
+        }
+
+        .editor-toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toolbar-button {
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .toolbar-button:hover {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+        }
+
+        .toolbar-button:active {
+            transform: scale(0.95);
+        }
+
+        .import-button {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+        }
+
+        .import-button:hover {
+            background: linear-gradient(135deg, #5dbd62, #4caf50);
+        }
+
+        .action-count-badge {
+            background-color: var(--accent-color);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .status-bar {
+            background-color: var(--secondary-bg);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .status-bar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .status-info {
+            flex: 1;
+            min-width: 0; /* 允許 flex item 縮小 */
+            overflow: hidden; /* 防止內容溢出 */
+        }
+
+        .status-bar p {
+            margin: 4px 0;
+            overflow: hidden; /* 防止段落溢出 */
+        }
+
+        .status-bar strong {
+            color: var(--accent-hover);
+        }
+
+        .status-settings-button {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            height: 28px;
+            min-width: 32px;
+        }
+
+        .status-settings-button:hover {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        #start-url {
+            color: var(--text-color);
+            text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            max-width: 250px; /* 限制最大寬度為 250 像素 */
+            vertical-align: middle;
+        }
+        #start-url:hover {
+            text-decoration: underline;
+            color: var(--accent-hover);
+        }
+
+        #status-message {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        .status-recording {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .status-stopped {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .actions-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            background-color: var(--secondary-bg);
+            border-radius: 6px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            scroll-behavior: smooth;
+            max-height: calc(100vh - 250px);
+            overflow-y: auto;
+            overflow-x: hidden ;
+        }
+
+        #actions-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .action-item, .action-item-placeholder {
+            background-color: var(--primary-bg);
+            border: 1px solid var(--border-color);
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        
+        .action-item.html-capture-item {
+            background-color: #334155; /* A different color for HTML captures */
+        }
+
+        .action-item:hover {
+            background-color: #4a4a50;
+        }
+
+        .action-item-placeholder {
+            color: #888;
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        .action-content {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        .action-step {
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .action-type {
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .action-details {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #b0b0b0;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+        }
+
+        .delete-button {
+            background: none;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+        }
+
+        .delete-button:hover {
+            color: var(--danger-color);
+            background-color: var(--secondary-bg);
+        }
+
+        .edit-button {
+            background: none;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+            margin-right: 4px;
+        }
+
+        .edit-button:hover {
+            color: var(--accent-color);
+            background-color: var(--secondary-bg);
+        }
+
+        .edit-button.has-comment {
+            color: var(--accent-color);
+            background-color: rgba(243, 10, 10, 0.986);
+        }
+
+        .edit-button.has-comment:hover {
+            color: var(--accent-hover);
+           background-color: rgba(243, 10, 10, 0.986);
+        }
+
+        .replace-button {
+            background: none;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+            margin-right: 4px;
+        }
+
+        .replace-button:hover {
+            color: #f39c12;
+            background-color: var(--secondary-bg);
+            transform: rotate(180deg);
+            transition: transform 0.3s;
+        }
+
+        .action-buttons {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .footer {
+            padding-top: 10px;
+            border-top: 1px solid var(--border-color);
+            margin-top: 10px;
+        }
+        
+        .manual-capture {
+            margin-bottom: 10px;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            font-size: 14px;
+        }
+        
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        button:not(:disabled):active {
+            transform: scale(0.98);
+        }
+
+        /* HTML Capture Config */
+        .html-config {
+            background-color: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        .html-config-title {
+            font-weight: bold;
+            margin-bottom: 6px;
+            color: var(--accent-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .settings-button {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 3px;
+            padding: 2px 6px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: background-color 0.2s;
+        }
+        .settings-button:hover {
+            background-color: var(--primary-bg);
+        }
+        .config-option {
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .config-option label {
+            flex: 1;
+            cursor: pointer;
+        }
+        .config-option select {
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 2px 4px;
+            font-size: 11px;
+        }
+
+        /* Settings Modal */
+        .settings-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .settings-modal.show {
+            display: flex;
+        }
+        .settings-modal-content {
+            background-color: var(--primary-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 400px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .settings-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .settings-modal-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+        .close-button {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+        }
+        .close-button:hover {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        .settings-section {
+            margin-bottom: 15px;
+        }
+        .settings-section-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: var(--accent-hover);
+        }
+        .settings-option {
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .settings-option label {
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .info-icon {
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            cursor: help;
+            flex-shrink: 0;
+        }
+        .info-icon:hover {
+            background-color: var(--accent-hover);
+            transform: scale(1.1);
+        }
+        .settings-option select,
+        .settings-option input {
+            background-color: var(--secondary-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+        .settings-option input[type="checkbox"] {
+            width: auto;
+            margin-right: 6px;
+        }
+        .checkbox-option {
+            flex-direction: row;
+            align-items: center;
+        }
+        .settings-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+        .settings-save-button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .settings-save-button:hover {
+            background-color: var(--accent-hover);
+        }
+        .settings-cancel-button {
+            background-color: var(--secondary-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .settings-cancel-button:hover {
+            background-color: var(--border-color);
+        }
+        #capture-html-button {
+             width: 100%;
+             background-color: #555;
+             color: var(--text-color);
+        }
+        #capture-html-button:not(:disabled):hover {
+            background-color: #666;
+        }
+
+        #save-button {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        #save-button:not(:disabled):hover {
+            background-color: var(--accent-hover);
+        }
+
+        #cancel-button {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        #cancel-button:not(:disabled):hover {
+            background-color: var(--danger-hover);
+        }
+
+        /* Screen record button styles */
+        #screen-record-button {
+            width:100%;
+            background:linear-gradient(135deg,#ff4757,#e84118);
+            color:#fff;
+            margin-bottom:8px;
+            font-weight:700;
+            position:relative;
+        }
+        #screen-record-button:not(:disabled):hover { background:linear-gradient(135deg,#ff5f6d,#ff2e43); }
+        #screen-record-button.recording { background:linear-gradient(135deg,#2ecc71,#27ae60); }
+        #screen-record-button.recording:not(:disabled):hover { background:linear-gradient(135deg,#34d67b,#2fba69); }
+        #screen-record-button .timer { font-weight:600; margin-left:6px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>SeleniumBase Recorder</h1>
+        
+        <!-- Mode Indicator -->
+        <div id="mode-indicator" class="mode-indicator" style="display: none;">
+            <span class="mode-badge">📝 Editor Mode</span>
+        </div>
+        
+        <div class="status-bar recorder-only">
+            <div class="status-bar-header">
+                <div class="status-info">
+                    <p><strong>Start URL:</strong> <a id="start-url" href="#" target="_blank" title="Click to open start URL">Not set</a></p>
+                    <p><strong>HTML Captures:</strong> <span id="html-count">0</span></p>
+                </div>
+                <button class="status-settings-button" id="open-settings-button" title="HTML Capture Settings">⚙️</button>
+            </div>
+            <div id="status-message" class="status-stopped">Recording stopped.</div>
+        </div>
+    </div>
+
+    <!-- Editor Toolbar (hidden by default, shown in Editor mode) -->
+    <div id="editor-toolbar" class="editor-toolbar" style="display: none;">
+        <div class="editor-toolbar-left">
+            <button id="import-json-button" class="toolbar-button import-button" title="Import Python Script">
+                📥 Import Script
+            </button>
+            <input type="file" id="json-file-input" accept=".py" style="display: none;">
+        </div>
+        <div class="editor-toolbar-right">
+            <span id="action-count-badge" class="action-count-badge">0 actions</span>
+        </div>
+    </div>
+
+    <div class="actions-container">
+        <div id="actions-list">
+            <!-- Recorded actions will be dynamically inserted here -->
+            <div class="action-item-placeholder">Start recording from the extension popup.</div>
+        </div>
+    </div>
+
+    <div class="footer">
+         <div class="manual-capture recorder-only">
+            <!-- HTML Capture Settings moved to modal, accessed via top-right settings button -->
+            <button id="screen-record-button">Start Screen Recording</button>
+            <button id="capture-html-button" disabled>Capture HTML Manually</button>
+            <button id="full-browser-shot-button" disabled style="margin-top:8px;background:#444;color:#fff;width:100%;">Full Browser Screenshot</button>
+        </div>
+        <div class="button-group">
+            <button id="cancel-button" disabled>Cancel & Discard</button>
+            <button id="save-button" disabled>Save & Export</button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="settings-modal" id="settings-modal">
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <div class="settings-modal-title">HTML Capture Settings</div>
+                <button class="close-button" id="close-settings-button">✖</button>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-option">
+                    <label for="modal-capture-mode">
+                        Mode:
+                        <span class="info-icon" title="Smart: Captures on significant changes (recommended)&#10;Auto: Regular interval captures (more files)&#10;Manual: Only captures when you click the button">ℹ️</span>
+                    </label>
+                    <select id="modal-capture-mode">
+                        <option value="smart">Smart (recommended)</option>
+                        <option value="auto">Auto (more captures)</option>
+                        <option value="manual">Manual only</option>
+                    </select>
+                </div>
+                <div class="settings-option">
+                    <label for="modal-capture-frequency">Frequency:</label>
+                    <select id="modal-capture-frequency">
+                        <option value="minimal">Minimal (2s interval)</option>
+                        <option value="normal">Normal (1s interval)</option>
+                        <option value="frequent">Frequent (0.5s interval)</option>
+                    </select>
+                </div>
+                <div class="settings-option checkbox-option">
+                    <input type="checkbox" id="enable-screenshots">
+                    <label for="enable-screenshots">Enable automatic screenshots</label>
+                </div>
+                <div class="settings-option">
+                    <label for="script-sleep-interval">
+                        Script Sleep Interval (seconds):
+                        
+                    </label>
+                    <select id="script-sleep-interval">
+                        <option value="0">No sleep (0s)</option>
+                        <option value="0.2">Very Fast (0.2s)</option>
+                        <option value="0.5">Fast (0.5s)</option>
+                        <option value="1" selected>Normal (1s)</option>
+                        <option value="1.5">Slow (1.5s)</option>
+                        <option value="2">Very Slow (2s)</option>
+                        <option value="3">Extra Slow (3s)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-buttons">
+                <button class="settings-cancel-button" id="settings-cancel-button">Cancel</button>
+                <button class="settings-save-button" id="settings-save-button">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="sidepanel.js"></script>
+</body>
+</html>

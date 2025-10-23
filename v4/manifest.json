@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "SeleniumBase Recorder",
+  "version": "1.7.6",
+  "description": "Records browser interactions and exports them as a SeleniumBase Python script.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "downloads",
+    "storage",
+    "tabs",
+    "idle"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "dnd_kit_enhancer.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["page_inject.js", "dialog_hooks.js", "popup_hooks.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "minimum_chrome_version": "114"
+}

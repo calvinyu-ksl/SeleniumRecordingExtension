@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selenium Recorder</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            width: 250px;
+            padding: 15px;
+            text-align: center;
+        }
+        h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+            cursor: pointer;
+            background-color: #f5f5f5;
+            color: #666;
+            border: none;
+            transition: all 0.3s ease;
+        }
+        .mode-btn:hover {
+            background-color: #e8e8e8;
+        }
+        .mode-btn.active {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
+        }
+        .mode-content {
+            display: none;
+        }
+        .mode-content.active {
+            display: block;
+        }
+        button.action-btn {
+            width: 100%;
+            padding: 12px 15px;
+            font-size: 14px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+            margin-bottom: 8px;
+        }
+        button.action-btn:hover {
+            background-color: #45a049;
+        }
+        button.action-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        button.action-btn.secondary {
+            background-color: #2196F3;
+        }
+        button.action-btn.secondary:hover {
+            background-color: #0b7dda;
+        }
+        p {
+            font-size: 12px;
+            color: #555;
+            margin: 10px 0;
+        }
+        .info-text {
+            font-size: 11px;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h3>Automation Test Tools</h3>
+    
+    <!-- Mode Selector -->
+    <div class="mode-selector">
+        <button class="mode-btn active" data-mode="recorder">
+            📹 Recorder
+        </button>
+        <button class="mode-btn" data-mode="editor">
+            ✏️ Editor
+        </button>
+    </div>
+
+    <!-- Recorder Mode -->
+    <div id="recorderMode" class="mode-content active">
+        <button id="startRecordingBtn" class="action-btn">Start Recording</button>
+        <p id="statusMessage"></p>
+    </div>
+
+    <!-- Editor Mode -->
+    <div id="editorMode" class="mode-content">
+        <button id="openEditorBtn" class="action-btn secondary">Open Editor</button>
+        <p class="info-text">Edit recorded actions, reorder steps, or modify selectors</p>
+        <p id="editorStatusMessage"></p>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

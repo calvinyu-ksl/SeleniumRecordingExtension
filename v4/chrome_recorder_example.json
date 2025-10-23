@@ -1,0 +1,52 @@
+{
+  "title": "Recorded Test with Slider Example",
+  "steps": [
+    {
+      "type": "navigate",
+      "url": "https://example.com",
+      "assertedEvents": [
+        {
+          "type": "navigation",
+          "url": "https://example.com",
+          "title": ""
+        }
+      ]
+    },
+    {
+      "type": "click",
+      "target": "main",
+      "selectors": [
+        ["#submitButton"]
+      ],
+      "offsetY": 0,
+      "offsetX": 0,
+      "button": "primary"
+    },
+    {
+      "type": "change",
+      "target": "main",
+      "selectors": [
+        ["#volumeSlider"]
+      ],
+      "value": "75"
+    },
+    {
+      "type": "change",
+      "target": "main",
+      "selectors": [
+        ["xpath//html/body/div/input"]
+      ],
+      "value": "test input value"
+    },
+    {
+      "type": "click",
+      "target": "main",
+      "selectors": [
+        ["xpath//html/body/div/button"]
+      ],
+      "offsetY": 0,
+      "offsetX": 0,
+      "button": "primary"
+    }
+  ]
+}
