@@ -504,6 +504,90 @@
   }
 
   /**
+   * Generates multiple fallback selectors for a given HTML element.
+   * Returns an array of selectors in priority order for use in findWorkingSelector.
+   * @param {Element} el The target HTML element.
+   * @returns {Array<string>} Array of selector strings (CSS and XPath)
+   */
+  function generateSelectorList(el) {
+    if (!(el instanceof Element)) return [];
+    
+    const selectors = [];
+    const tagName = el.tagName.toLowerCase();
+
+    // 1. ID-based selectors (if element has id)
+    if (el.id) {
+      const id = el.id;
+      
+      // CSS ID selector
+      try {
+        const cssSelector = `#${CSS.escape(id)}`;
+        if (document.querySelectorAll(cssSelector).length === 1) {
+          selectors.push(cssSelector);
+        }
+      } catch (e) { /* ignore */ }
+      
+      // XPath ID selector
+      try {
+        const xpathSelector = `//*[@id="${id}"]`;
+        if (document.evaluate(xpathSelector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength === 1) {
+          selectors.push(xpathSelector);
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // 2. data-testid selectors (if exists)
+    const testId = el.getAttribute("data-testid");
+    if (testId) {
+      try {
+        const cssSelector = `[data-testid="${CSS.escape(testId)}"]`;
+        if (document.querySelectorAll(cssSelector).length === 1) {
+          selectors.push(cssSelector);
+        }
+      } catch (e) { /* ignore */ }
+      
+      try {
+        const xpathSelector = `//*[@data-testid="${testId}"]`;
+        if (document.evaluate(xpathSelector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength === 1) {
+          selectors.push(xpathSelector);
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // 3. Class-based CSS selector (if has stable classes)
+    if (el.classList && el.classList.length > 0) {
+      const forbiddenClassesRegex = /^(?:active|focus|hover|selected|checked|disabled|visited|focus-within|focus-visible|focusNow|open|opened|closed|collapsed|expanded|js-|ng-|is-|has-|ui-|data-v-|aria-|css-|__recording_highlight__|__recording_)/i;
+      const stableClasses = Array.from(el.classList)
+        .map((c) => c.trim())
+        .filter((c) => c && !forbiddenClassesRegex.test(c) && /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(c));
+
+      if (stableClasses.length > 0) {
+        let baseSelector = `${tagName}.${stableClasses.map((c) => CSS.escape(c)).join(".")}`;
+        try {
+          if (document.querySelectorAll(baseSelector).length === 1) {
+            selectors.push(baseSelector);
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    // 4. Absolute XPath (always add as final fallback)
+    try {
+      const absXPath = generateAbsoluteXPath(el);
+      if (absXPath) {
+        selectors.push(trimNonInteractiveXPathTail(absXPath));
+      }
+    } catch (e) { /* ignore */ }
+
+    // If no selectors generated, add tagName as last resort
+    if (selectors.length === 0) {
+      selectors.push(tagName);
+    }
+
+    return selectors;
+  }
+
+  /**
    * Generates a CSS or XPath selector for a given HTML element.
    * Prioritization: ID -> Name -> data-testid -> role -> title -> Combined Class + Structure -> Text XPath -> Absolute XPath -> Basic TagName.
    * Returns XPath selectors (now WITHOUT the historical 'xpath=' prefix; backward compatible handling kept elsewhere).
@@ -612,426 +696,44 @@
     }
     // console.log(`generateRobustSelector: Finding selector for <${tagName}>`, el); // Optional debug
 
-    // --- Priority: ID > XPath > CSS ---
+    // --- Simplified Priority: ID XPath ONLY, then Absolute XPath ---
 
-    // 1. ID (highest priority - try XPath first, then CSS)
+    // 1. ID XPath (ONLY if element has id attribute)
     if (el.id) {
       const id = el.id;
       console.log(`[ID Check] Element has ID: "${id}"`);
-      // Relax stable ID conditions, only exclude obvious framework-generated IDs
-      const unstableIdRegex =
-        /^(?:radix-|ember-|data-v-|svelte-|ui-id-|aria-|temp-|auto-|react-)/i;
-      const looksUnstable =
-        unstableIdRegex.test(id) || id.length > 80 || /^\d+$/.test(id);
-      console.log(`[ID Check] Is unstable? ${looksUnstable}`);
-      if (!looksUnstable) {
-        // XPath version (highest priority for ID-based selectors)
-        try {
-          const xpathSelector = `//*[@id="${id}"]`;
-          const snapshotLength = document.evaluate(
-            xpathSelector,
-            document,
-            null,
-            XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-            null
-          ).snapshotLength;
-          console.log(
-            `[ID Check] XPath selector "${xpathSelector}" matches: ${snapshotLength}`
-          );
-          if (snapshotLength === 1) {
-            console.log(
-              `✅ Priority 1: Using ID XPath selector: ${xpathSelector}`
-            );
-            return xpathSelector;
-          }
-        } catch (e) {
-          console.error(`[ID Check] XPath selector failed:`, e);
-        }
-
-        // CSS version as fallback for ID
-        try {
-          const cssSelector = `#${CSS.escape(id)}`;
-          const matchCount = document.querySelectorAll(cssSelector).length;
-          console.log(
-            `[ID Check] CSS selector "${cssSelector}" matches: ${matchCount}`
-          );
-          if (matchCount === 1) {
-            console.log(
-              `✅ Priority 1: Using stable ID CSS selector: ${cssSelector}`
-            );
-            return cssSelector;
-          }
-        } catch (e) {
-          console.error(`[ID Check] CSS selector failed:`, e);
-        }
-
-        const idAttrSelector = `${tagName}[id="${CSS.escape(id)}"]`;
-        try {
-          const matchCount = document.querySelectorAll(idAttrSelector).length;
-          console.log(
-            `[ID Check] Attribute selector "${idAttrSelector}" matches: ${matchCount}`
-          );
-          if (matchCount === 1) {
-            console.log(
-              `✅ Priority 1: Using ID attribute selector: ${idAttrSelector}`
-            );
-            return idAttrSelector;
-          }
-        } catch (e) {
-          console.error(`[ID Check] Attribute selector failed:`, e);
-        }
-      } else {
-        console.warn(
-          `generateRobustSelector: Skipping potentially unstable ID '${id}'.`
+      // Use ID XPath directly without stability checks
+      try {
+        const xpathSelector = `//*[@id="${id}"]`;
+        const snapshotLength = document.evaluate(
+          xpathSelector,
+          document,
+          null,
+          XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+          null
+        ).snapshotLength;
+        console.log(
+          `[ID Check] XPath selector "${xpathSelector}" matches: ${snapshotLength}`
         );
+        if (snapshotLength === 1) {
+          console.log(
+            `✅ Priority 1: Using ID XPath selector: ${xpathSelector}`
+          );
+          return xpathSelector;
+        }
+      } catch (e) {
+        console.error(`[ID Check] XPath selector failed:`, e);
       }
     } else {
       console.log(`[ID Check] Element has NO ID`);
     }
 
-    // 2. XPath selectors (second priority - before other CSS selectors)
-    console.log("✅ Priority 2: Trying XPath selectors...");
-
-    // 2.1 Try text-based XPath first (most stable for clickable elements)
-    const tagsForTextCheck = [
-      "a",
-      "button",
-      "span",
-      "div",
-      "label",
-      "legend",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "p",
-      "li",
-      "td",
-      "th",
-    ];
-    if (tagsForTextCheck.includes(tagName)) {
-      let text = el.textContent?.trim() || "";
-      // Normalize whitespace and limit length for practicality
-      text = text.replace(/\s+/g, " ").trim();
-      if (text && text.length > 0 && text.length < 100) {
-        // Avoid using very long text
-        // Escape quotes for XPath string literal
-        let escapedText = text.includes("'")
-          ? `concat('${text.replace(/'/g, "', \"'\", '")}')`
-          : `'${text}'`;
-        // Try exact match first using normalize-space()
-        let textXPath = `//${tagName}[normalize-space()=${escapedText}]`;
-        try {
-          // Use evaluate to count matches accurately
-          if (
-            document.evaluate(
-              `count(${textXPath})`,
-              document,
-              null,
-              XPathResult.NUMBER_TYPE,
-              null
-            ).numberValue === 1
-          ) {
-            console.log(
-              `✅ Priority 2.1: Using Text Content XPath: ${textXPath}`
-            );
-            return trimNonInteractiveXPathTail(`${textXPath}`);
-          }
-        } catch (e) {
-          /* ignore */
-        }
-      }
-    }
-
-    // 2.2 Try data-dnd-kit-id XPath
-    const dndKitId = el.getAttribute("data-dnd-kit-id");
-    if (dndKitId) {
-      const xpathSelector = `//div[@data-dnd-kit-id="${dndKitId}"]`;
-      try {
-        if (
-          document.evaluate(
-            xpathSelector,
-            document,
-            null,
-            XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-            null
-          ).snapshotLength === 1
-        ) {
-          console.log(
-            `✅ Priority 2.2: Using DND-Kit XPath selector: ${xpathSelector}`
-          );
-          return xpathSelector;
-        }
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    // 2.3 Try promoted ancestor XPath (for icons/non-interactive elements)
-    try {
-      if (promotedToAncestor && originalEl && originalEl !== el) {
-        const clickTag = tagName;
-        const origTitle =
-          originalEl.getAttribute && originalEl.getAttribute("title");
-        const origAria =
-          originalEl.getAttribute && originalEl.getAttribute("aria-label");
-        const origDataIcon =
-          originalEl.getAttribute && originalEl.getAttribute("data-icon");
-        const origHasAntIcon =
-          originalEl.classList &&
-          originalEl.classList.contains("anticon-download");
-        function evalUniqueXPath(xpath) {
-          try {
-            return (
-              document.evaluate(
-                `count(${xpath})`,
-                document,
-                null,
-                XPathResult.NUMBER_TYPE,
-                null
-              ).numberValue === 1
-            );
-          } catch (e) {
-            return false;
-          }
-        }
-        if (origTitle) {
-          const xp = `//${clickTag}[.//*[@title=${xpathLiteral(origTitle)}]]`;
-          if (evalUniqueXPath(xp)) {
-            console.log(`✅ Priority 2.3: Using ancestor title XPath: ${xp}`);
-            return xp;
-          }
-        }
-        if (origAria) {
-          const xp = `//${clickTag}[.//*[@aria-label=${xpathLiteral(
-            origAria
-          )}]]`;
-          if (evalUniqueXPath(xp)) {
-            console.log(`✅ Priority 2.3: Using ancestor aria XPath: ${xp}`);
-            return xp;
-          }
-        }
-        if (origDataIcon) {
-          const xp = `//${clickTag}[.//*[@data-icon=${xpathLiteral(
-            origDataIcon
-          )}]]`;
-          if (evalUniqueXPath(xp)) {
-            console.log(
-              `✅ Priority 2.3: Using ancestor data-icon XPath: ${xp}`
-            );
-            return xp;
-          }
-        }
-        if (origHasAntIcon) {
-          const xp = `//${clickTag}[.//*[contains(concat(' ', normalize-space(@class), ' '), ' anticon-download ')]]`;
-          if (evalUniqueXPath(xp)) {
-            console.log(`✅ Priority 2.3: Using ancestor anticon XPath: ${xp}`);
-            return xp;
-          }
-        }
-      }
-    } catch (e) {
-      /* ignore ancestor-descendant xpath fallback errors */
-    }
-
-    // 3. CSS selectors (third priority - after ID and XPath)
-    console.log("✅ Priority 3: Trying CSS selectors...");
-
-    // 2. Name (common in form fields)
-    if (el.name) {
-      const name = el.name;
-      const selector = `${tagName}[name="${CSS.escape(name)}"]`;
-      try {
-        if (document.querySelectorAll(selector).length === 1) return selector;
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    // 3. data-testid (test attribute, usually stable)
-    const testId = el.getAttribute("data-testid");
-    if (testId) {
-      const selector = `${tagName}[data-testid="${CSS.escape(testId)}"]`;
-      try {
-        if (document.querySelectorAll(selector).length === 1) return selector;
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    // 4. data-dnd-kit-id CSS selector (XPath version already tried in priority 2)
-    const dndKitIdCSS = el.getAttribute("data-dnd-kit-id");
-    if (dndKitIdCSS) {
-      const cssSelector = `[data-dnd-kit-id="${CSS.escape(dndKitIdCSS)}"]`;
-      try {
-        if (document.querySelectorAll(cssSelector).length === 1) {
-          console.log(
-            `✅ Priority 3.1: Using DND-Kit CSS selector: ${cssSelector}`
-          );
-          return cssSelector;
-        }
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    // 5. role (ARIA role)
-    const role = el.getAttribute("role");
-    if (
-      role &&
-      role !== "presentation" &&
-      role !== "none" &&
-      role !== "document" &&
-      role !== "main"
-    ) {
-      const selector = `${tagName}[role="${CSS.escape(role)}"]`;
-      try {
-        if (document.querySelectorAll(selector).length === 1) return selector;
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    // 6. title (tooltip text)
-    const title = el.getAttribute("title");
-    if (title) {
-      const selector = `${tagName}[title="${CSS.escape(title)}"]`;
-      try {
-        if (document.querySelectorAll(selector).length === 1) return selector;
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    // 7. Anchor-specific: prefer href/title/aria-label
-    if (tagName === "a") {
-      try {
-        const href = el.getAttribute("href");
-        if (href && href.length < 300) {
-          const exactSel = `a[href="${CSS.escape(href)}"]`;
-          if (document.querySelectorAll(exactSel).length === 1) return exactSel;
-          // Try filename tail if URL has a file name
-          const tail = href
-            .split("?")[0]
-            .split("#")[0]
-            .split("/")
-            .filter(Boolean)
-            .pop();
-          if (tail && tail.length < 120) {
-            const endsSel = `a[href$="${CSS.escape(tail)}"]`;
-            if (document.querySelectorAll(endsSel).length === 1) return endsSel;
-          }
-        }
-        const aTitle = el.getAttribute("title");
-        if (aTitle) {
-          const s = `a[title="${CSS.escape(aTitle)}"]`;
-          if (document.querySelectorAll(s).length === 1) return s;
-        }
-        const aria = el.getAttribute("aria-label");
-        if (aria) {
-          const s = `a[aria-label="${CSS.escape(aria)}"]`;
-          if (document.querySelectorAll(s).length === 1) return s;
-        }
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    // 8. Combine stable classes with structure (nth-of-type, etc.)
-    let baseSelector = tagName;
-    if (el.classList && el.classList.length > 0) {
-      const forbiddenClassesRegex =
-        /^(?:active|focus|hover|selected|checked|disabled|visited|focus-within|focus-visible|focusNow|open|opened|closed|collapsed|expanded|js-|ng-|is-|has-|ui-|data-v-|aria-|css-|__recording_highlight__|__recording_)/i;
-      const stableClasses = Array.from(el.classList)
-        .map((c) => c.trim())
-        .filter(
-          (c) =>
-            c &&
-            !forbiddenClassesRegex.test(c) &&
-            /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(c)
-        );
-
-      if (stableClasses.length > 0) {
-        baseSelector += `.${stableClasses.map((c) => CSS.escape(c)).join(".")}`;
-      }
-    }
-
-    try {
-      // First, try the base selector (tag + classes) on its own. This is the most common and robust case.
-      if (document.querySelectorAll(baseSelector).length === 1) {
-        return baseSelector;
-      }
-
-      // If not unique, try to make it unique with a structural pseudo-class.
-      if (el.parentNode) {
-        // Try with :nth-of-type
-        let siblingOfType = el;
-        let typeIndex = 1;
-        while ((siblingOfType = siblingOfType.previousElementSibling)) {
-          // We only increment the index if the sibling matches the base selector,
-          // making it a true "nth-of-type-with-classes"
-          if (siblingOfType.matches(baseSelector)) {
-            typeIndex++;
-          }
-        }
-        // Check if this is the only element of its type that matches the base selector
-        const parentNthOfTypeSelector = `:scope > ${baseSelector}`;
-        if (
-          el.parentNode.querySelectorAll(parentNthOfTypeSelector).length > 1
-        ) {
-          const nthOfTypeSelector = `${baseSelector}:nth-of-type(${typeIndex})`;
-          if (document.querySelectorAll(nthOfTypeSelector).length === 1) {
-            return nthOfTypeSelector;
-          }
-        }
-
-        // If that fails, try with :nth-child (but avoid for anchors/buttons as it's brittle)
-        if (tagName !== "a" && tagName !== "button") {
-          let siblingChild = el;
-          let childIndex = 1;
-          while ((siblingChild = siblingChild.previousElementSibling)) {
-            childIndex++;
-          }
-          const nthChildSelector = `${baseSelector}:nth-child(${childIndex})`;
-          if (document.querySelectorAll(nthChildSelector).length === 1) {
-            return nthChildSelector;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(
-        "Error during combined class/structure selector generation:",
-        e
-      );
-    }
-
-    // Last resort: avoid returning overly fragile a/button nth-child
-    try {
-      if (
-        (tagName === "a" || tagName === "button") &&
-        baseSelector &&
-        /\:nth-child\(\d+\)/.test(baseSelector)
-      ) {
-        const abs = generateAbsoluteXPath(el);
-        if (abs) {
-          console.log(
-            `✅ Priority 3.5: Using absolute XPath for fragile nth-child: ${abs}`
-          );
-          return abs;
-        }
-      }
-    } catch (e) {
-      /* ignore */
-    }
-
-    // 4. Absolute XPath fallback (final XPath attempt)
-    console.log("✅ Priority 4: Trying Absolute XPath fallback...");
+    // 2. Absolute XPath (fallback for all cases without ID)
+    console.log("✅ Priority 2: Using Absolute XPath...");
     try {
       let absXPath = generateAbsoluteXPath(el);
       if (absXPath) {
-        console.log(`✅ Priority 4: Using Absolute XPath: ${absXPath}`);
+        console.log(`✅ Priority 2: Using Absolute XPath: ${absXPath}`);
         return trimNonInteractiveXPathTail(absXPath);
       } else {
         console.error(
@@ -1042,7 +744,7 @@
       console.warn("Error during Absolute XPath generation:", e);
     }
 
-    // 10. Final fallback: use tagName only (strongly discouraged, only when everything else fails)
+    // 3. Final fallback: use tagName only (strongly discouraged, only when everything else fails)
     console.error(
       `generateRobustSelector: CRITICAL FALLBACK to basic tag name for element:`,
       el
@@ -1087,6 +789,36 @@
 
       // 獲取當前頁面 URL
       const pageUrl = window.location.href;
+      //create page if not exists
+      if(pageUrl!==window.location.href){
+        const createPageAPIPayload = {
+          pages: [
+            {
+              pageName: document.title || "",
+              pageUrl: window.location.href,
+              content: document.documentElement.outerHTML,
+            },
+          ],
+        };
+        console.log("[API] Sending new page data to API:", createPageAPIPayload);
+        const createPageResponse = await fetch("http://127.0.0.1:5000/api/create_pages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(createPageAPIPayload),
+        });
+        if (createPageResponse.ok) {
+          const createPageResult = await createPageResponse.json();
+          console.log("[API] ✅ Page data sent successfully:", createPageResult);
+        } else {
+          console.log(
+            "[API] ❌ Failed to send page data:",
+            createPageResponse.status,
+            createPageResponse.statusText
+          );
+        }
+      }
 
       // 提取元素基本信息
       const tagName = element.tagName
@@ -1512,8 +1244,9 @@
         targetForSelector = clickableAncestor || anchorEl || actualTarget;
       }
 
-      // Always use absolute XPath of target element (trim svg/path tail when necessary)
+      // Generate multiple fallback selectors
       let selector = null;
+      let selectorList = [];
       try {
         // Special handling for Ant Design Select items
         if (
@@ -1547,6 +1280,7 @@
             const abs = generateAbsoluteXPath(targetForSelector);
             selector = abs ? trimNonInteractiveXPathTail(abs) : null;
           }
+          selectorList = selector ? [selector] : [];
         }
         // Special handling for Ant Design Radio buttons
         else if (
@@ -1584,18 +1318,22 @@
             const abs = generateAbsoluteXPath(targetForSelector);
             selector = abs ? trimNonInteractiveXPathTail(abs) : null;
           }
+          selectorList = selector ? [selector] : [];
         } else {
-          // Normal selector generation - use generateRobustSelector for ID priority
-          selector = generateRobustSelector(targetForSelector);
+          // Normal selector generation - generate multiple fallback selectors
+          selectorList = generateSelectorList(targetForSelector);
+          selector = selectorList.length > 0 ? selectorList[0] : null;
         }
         console.log(
-          `Content: Generated click selector for element:`,
+          `Content: Generated click selectors for element:`,
           targetForSelector,
-          `selector: ${selector}`
+          `primary: ${selector}`,
+          `list: [${selectorList.join(', ')}]`
         );
       } catch (e) {
         console.error("Content: Error generating selector:", e);
         selector = null;
+        selectorList = [];
       }
       if (!selector) return; // Skip if unable to generate XPath
       const anchorSelector = anchorEl
@@ -1619,6 +1357,7 @@
       const action = {
         type: "Click",
         selector: selector,
+        selectorList: selectorList, // Array of fallback selectors
         selectorType:
           selector &&
           (selector.startsWith("xpath=") || selector.startsWith("/"))
@@ -1677,10 +1416,13 @@
 
     // console.log(`handleChange: Detected change on <${tagName}>`, targetElement); // Optional debug
     let selector = null;
+    let selectorList = [];
     try {
-      selector = generateRobustSelector(targetElement);
+      selectorList = generateSelectorList(targetElement);
+      selector = selectorList.length > 0 ? selectorList[0] : null;
     } catch (e) {
       selector = null;
+      selectorList = [];
     }
     if (!selector) {
       console.warn(
@@ -1695,6 +1437,7 @@
       actionData = {
         type: "Select",
         selector: selector,
+        selectorList: selectorList,
         value: targetElement.value,
         selectorType: "XPath",
         timestamp: Date.now(),
@@ -1710,6 +1453,7 @@
         actionData = {
           type: "Slider",
           selector: selector,
+          selectorList: selectorList,
           value: String(targetElement.value),
           min: min != null ? String(min) : null,
           max: max != null ? String(max) : null,
@@ -1736,6 +1480,7 @@
           type: "Upload",
           method: "click", // Distinguish from drag-drop file upload
           selector: selector,
+          selectorList: selectorList,
           value: fileNames.join(", "), // Display in side panel
           fileNames: fileNames, // Extra metadata for generator
           fileCount: fileNames.length,
@@ -1852,6 +1597,7 @@
       actionData = {
         type: "Checkbox",
         selector: selector,
+        selectorList: selectorList,
         value: targetElement.checked, // The final state (true/false)
         selectorType: "XPath",
         timestamp: Date.now(),
@@ -1876,6 +1622,7 @@
       actionData = {
         type: "Radio",
         selector: selector,
+        selectorList: selectorList,
         value: targetElement.checked, // Should be true when selected
         radioValue: targetElement.value, // The value attribute of the radio button
         radioName: targetElement.name, // The name attribute (group identifier)
@@ -1945,10 +1692,13 @@
       }
 
       let selector = null;
+      let selectorList = [];
       try {
-        selector = generateAbsoluteXPath(el);
+        selectorList = generateSelectorList(el);
+        selector = selectorList.length > 0 ? selectorList[0] : null;
       } catch (e) {
         selector = null;
+        selectorList = [];
       }
       if (!selector) return;
 
@@ -1961,6 +1711,7 @@
       const action = {
         type: "Slider",
         selector,
+        selectorList: selectorList,
         value: displayVal,
         min: ariaMin != null ? String(ariaMin) : null,
         max: ariaMax != null ? String(ariaMax) : null,
@@ -2022,6 +1773,7 @@
 
       // For tiny autocomplete internal input, prefer outer wrapper XPath; otherwise use its own absolute XPath
       let selector = null;
+      let selectorList = [];
       if (tag === "input") {
         try {
           const ariaAuto = (
@@ -2050,7 +1802,8 @@
               '[role="combobox"], [aria-haspopup="listbox"], [class*="__control"], [class*="__value-container"], .MuiAutocomplete-root, .react-select__control, [class*="auto-complete"]'
             );
             if (wrapper && wrapper instanceof Element) {
-              selector = generateAbsoluteXPath(wrapper);
+              selectorList = generateSelectorList(wrapper);
+              selector = selectorList.length > 0 ? selectorList[0] : null;
             }
           }
         } catch (e) {
@@ -2058,7 +1811,8 @@
         }
       }
       if (!selector) {
-        selector = generateAbsoluteXPath(el);
+        selectorList = generateSelectorList(el);
+        selector = selectorList.length > 0 ? selectorList[0] : null;
       }
       if (!selector) return;
 
@@ -2066,6 +1820,7 @@
         // Send to background page, ask it to integrate final value with debounce
         type: "Input",
         selector, // Absolute XPath or wrapper XPath
+        selectorList: selectorList,
         value: el.value != null ? String(el.value) : "",
         inputType: type || tag,
         selectorType: "XPath",
@@ -4007,13 +3762,18 @@
             reasonCode = "target-equals-source-skip";
           }
           if (targetSelector !== src.selector) {
+            const sourceElement = src.element || null;
+            const targetElement = (preciseItem && preciseItem.element) || null;
+            
             const action = {
               type: "DragAndDrop",
               sourceSelector: src.selector,
               targetSelector: targetSelector,
+              sourceSelectorList: sourceElement ? generateSelectorList(sourceElement) : [src.selector],
+              targetSelectorList: targetElement ? generateSelectorList(targetElement) : [targetSelector],
               sourceElementInfo: src.elementInfo,
               targetElementInfo:
-                getElementInfo((preciseItem && preciseItem.element) || null) ||
+                getElementInfo(targetElement) ||
                 last.elementInfo ||
                 null,
               containerKind: last.kind || "synthetic-pointer",
@@ -4038,7 +3798,7 @@
               targetSource: action.targetSource,
               reasonCode: action.reasonCode,
               pointerCoords: { x: e.clientX, y: e.clientY },
-              targetElement: (preciseItem && preciseItem.element) || null,
+              targetElement: targetElement,
             });
 
             // Post-frame refinement commit instead of immediate send
@@ -4676,14 +4436,17 @@
         /* ignore */
       }
 
+      const sourceElement = dragSource.element || null;
+      const targetElement = (foundItem && foundItem.element) || pointEl || foundContainer.element;
+
       const action = {
         type: "DragAndDrop",
         sourceSelector: dragSource.selector,
         targetSelector: primaryTargetSelector,
+        sourceSelectorList: sourceElement ? generateSelectorList(sourceElement) : [dragSource.selector],
+        targetSelectorList: targetElement ? generateSelectorList(targetElement) : [primaryTargetSelector],
         sourceElementInfo: dragSource.elementInfo,
-        targetElementInfo: getElementInfo(
-          (foundItem && foundItem.element) || pointEl || foundContainer.element
-        ),
+        targetElementInfo: getElementInfo(targetElement),
         containerKind: foundContainer.kind,
         containerSelector: foundContainer.selector,
         pointerElementSelector,
@@ -4742,10 +4505,15 @@
             "[DND] Synthesizing DragAndDrop action from dragend using last pointer hit:",
             last
           );
+          const sourceElement = src.element || null;
+          const targetElement = last.element || null;
+          
           const action = {
             type: "DragAndDrop",
             sourceSelector: src.selector,
             targetSelector: last.selector,
+            sourceSelectorList: sourceElement ? generateSelectorList(sourceElement) : [src.selector],
+            targetSelectorList: targetElement ? generateSelectorList(targetElement) : [last.selector],
             sourceElementInfo: src.elementInfo,
             targetElementInfo: last.elementInfo || null,
             containerKind: last.kind || "synthetic-end",

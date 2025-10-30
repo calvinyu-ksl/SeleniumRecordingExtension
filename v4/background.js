@@ -564,13 +564,13 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
     `            try:`,
     `                checkbox = self.find_element(checkbox_selector)`,
     `                if not checkbox.get_attribute('disabled'):`,
-    `                    print(f"[SCROLL-ENABLE] ✅ Checkbox is now enabled")`,
+    `                    print(f"[SCROLL-ENABLE] Checkbox is now enabled")`,
     `                    return True`,
     `            except Exception as e:`,
     `                pass`,
     `            time.sleep(0.5)`,
     `        `,
-    `        print(f"[SCROLL-ENABLE] ❌ Timeout waiting for checkbox to be enabled")`,
+    `        print(f"[SCROLL-ENABLE] Timeout waiting for checkbox to be enabled")`,
     `        return False`,
     ``,
     `    def wait_for_attribute_not_value(self, selector, attribute, value=None, timeout=10):`,
@@ -598,6 +598,17 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
     `                    pass`,
     `                time.sleep(0.1)`,
     `        return False`,
+    ``,
+    `    def findWorkingSelector(self, selector_list):`,
+
+    `        for i, selector in enumerate(selector_list, start=1):`,
+    `            try:`,
+    `                self.wait_for_element_present(selector, timeout=2)`,
+    `                return selector`,
+    `            except Exception as e:`,
+    `                if i == len(selector_list):`,
+    `                    raise `,
+    `                continue`,
     ``,
     `    def test_recorded_script(self):`,
     `        # --- Test Actions ---`,
@@ -812,27 +823,32 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           selForClick = selForClick.replace(/\/input(?:\[\d+\])?$/, "");
           console.log(`Background: Modified click selector to: ${selForClick}`);
         }
-        const finalClickSelector = quotePythonString(selForClick);
-        console.log(
-          `Background: Final click selector with quotes: ${finalClickSelector}`
-        );
+
+        // Generate selector list for findWorkingSelector
+        const selectorList = action.selectorList || [selForClick];
+        const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
+        
+        lines.push(`        # Try multiple selectors to find a working one`);
+        lines.push(`        selector_list = [${pythonSelectorList}]`);
+        lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+        lines.push(`        `);
 
         // Add scroll to element before clicking to ensure visibility
         lines.push(`        try:`);
         lines.push(
-          `            self.wait_for_element_present(${finalClickSelector}, timeout=5)`
+          `            self.wait_for_element_present(selector, timeout=5)`
         );
-        lines.push(`            self.scroll_to(${finalClickSelector})`);
+        lines.push(`            self.scroll_to(selector)`);
         lines.push(`        except Exception:`);
         lines.push(`            pass  # Continue even if scroll fails`);
         lines.push(
-          `        self.wait_for_element_clickable(${finalClickSelector}, timeout=10)`
+          `        self.wait_for_element_clickable(selector, timeout=10)`
         );
 
         if (isAutocompleteOptionClick) {
-          lines.push(`        self.click(${finalClickSelector})`);
+          lines.push(`        self.click(selector)`);
         } else {
-          lines.push(`        self.click(${finalClickSelector})`);
+          lines.push(`        self.click(selector)`);
         }
         break;
       }
@@ -854,19 +870,28 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.splice(0, 0, `from selenium.webdriver.common.keys import Keys`);
         }
 
+        // Generate selector list for finding working slider element
+        const selectorList = action.selectorList || [selector];
+        const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
+        
+        lines.push(`        # Try multiple selectors to find a working one`);
+        lines.push(`        selector_list = [${pythonSelectorList}]`);
+        lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+        lines.push(`        `);
+
         const targetVal = action.value != null ? String(action.value) : "";
         const tEsc = targetVal.replace(/'/g, "\\'");
 
         // Ensure slider is visible and clickable
-        //lines.push(`        self.scroll_to(${finalSelector}, timeout=10)`);
+        //lines.push(`        self.scroll_to(selector, timeout=10)`);
         lines.push(
-          `        self.wait_for_element_clickable(${finalSelector}, timeout=10)`
+          `        self.wait_for_element_clickable(selector, timeout=10)`
         );
-        lines.push(`        slider = self.find_element(${finalSelector})`);
+        lines.push(`        slider = self.find_element(selector)`);
 
         // Read current value and attributes (if available)
         lines.push(
-          `        current_value = self.get_attribute(${finalSelector}, 'value') or '0'`
+          `        current_value = self.get_attribute(selector, 'value') or '0'`
         );
         lines.push(`        try:`);
         lines.push(
@@ -917,11 +942,11 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             )`);
         lines.push(`            try:`);
         lines.push(
-          `                self.wait_for_attribute(${finalSelector}, 'value', target_value, timeout=5)`
+          `                self.wait_for_attribute(selector, 'value', target_value, timeout=5)`
         );
         lines.push(`            except Exception:`);
         lines.push(`                # If value doesn't change, try waiting for aria-valuenow
-                self.wait_for_attribute(${finalSelector}, 'aria-valuenow', target_value, timeout=3)`);
+                self.wait_for_attribute(selector, 'aria-valuenow', target_value, timeout=3)`);
         lines.push(`        except Exception as e:`);
         lines.push(`            print(f"JavaScript setup: {str(e)}")`);
         lines.push(`            self.save_screenshot('javascript_error.png')`);
@@ -1008,6 +1033,10 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
               continue; // Skip this duplicate
             }
           }
+          
+          // Generate selector list for findWorkingSelector
+          const selectorList = action.selectorList || [selector];
+          
           // Normalize selectors
           let origSel = selector.startsWith("xpath=")
             ? selector.slice(6)
@@ -1054,16 +1083,33 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           }
 
           // Wrap selectors with appropriate quotes
-          const quotedInputSel = quotePythonString(inputSel);
-          const quotedOrigSel = quotePythonString(origSel);
+          const pythonSelectorList = selectorList.map(s => {
+            let normalized = s.startsWith("xpath=") ? s.slice(6) : s;
+            // Apply same wrapper logic to each selector if needed
+            if (!isIdSelector && (looksLikeWrapper || mightBeWrapperByXPath)) {
+              if (normalized.startsWith("/") && !/\/input(\[|$)/i.test(normalized)) {
+                normalized = `${normalized}//input[not(@type) or @type='text' or @type='search']`;
+              } else if (!/\sinput(\W|$)/i.test(normalized)) {
+                normalized = `${normalized} input`;
+              }
+            }
+            return quotePythonString(normalized);
+          }).join(', ');
+          
           const escapedValue = String(action.value).replace(/'/g, "\\'");
+
+          // Use findWorkingSelector to find available selector
+          lines.push(`        # Try multiple selectors to find a working one`);
+          lines.push(`        selector_list = [${pythonSelectorList}]`);
+          lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+          lines.push(`        `);
 
           // Wait for target input to appear and scroll into view
           lines.push(
-            `        self.wait_for_element_present(${quotedInputSel}, timeout=10)`
+            `        self.wait_for_element_present(selector, timeout=10)`
           );
           lines.push(`        try:`);
-          lines.push(`            self.scroll_to(${quotedInputSel})`);
+          lines.push(`            self.scroll_to(selector)`);
           lines.push(`        except Exception:`);
           lines.push(`            pass  # Continue even if scroll fails`);
 
@@ -1083,21 +1129,13 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             (prevSelNorm !== inputSel && prevSelNorm !== origSel);
 
           if (shouldClick) {
-            // For wrapper-like elements, click the wrapper first for stable focus
-            // But only if inputSel is different from origSel (i.e., we added a suffix)
-            if (
-              (looksLikeWrapper || mightBeWrapperByXPath) &&
-              inputSel !== origSel
-            ) {
-              lines.push(`        self.click(${quotedOrigSel})`);
-            }
             // Only click if we haven't already clicked in the previous step
-            lines.push(`        self.click(${quotedInputSel})`);
+            lines.push(`        self.click(selector)`);
           }
 
           // Use send_keys to maintain compatibility (won't clear existing content)
           lines.push(
-            `        self.send_keys(${quotedInputSel}, '${escapedValue}')`
+            `        self.send_keys(selector, '${escapedValue}')`
           );
           lastInputSelector = selector;
 
@@ -1130,6 +1168,10 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
       }
       case "Select": {
         // Native <select> selection
+        
+        // Generate selector list for findWorkingSelector
+        const selectorList = action.selectorList || [selector];
+        const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
 
         const isNativeSelect = selector && /select|option/.test(selector);
         const rawVal =
@@ -1147,21 +1189,25 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         if (isNativeSelect) {
           if (!sval) {
             lines.push(
-              `        # SELECT action recorded but no value captured for ${finalSelector}`
+              `        # SELECT action recorded but no value captured`
             );
           } else {
+            lines.push(`        # Try multiple selectors to find a working one`);
+            lines.push(`        selector_list = [${pythonSelectorList}]`);
+            lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+            lines.push(`        `);
             lines.push(`        try:`);
             lines.push(
-              `            self.wait_for_element_present(${finalSelector}, timeout=5)`
+              `            self.wait_for_element_present(selector, timeout=5)`
             );
-            lines.push(`            self.scroll_to(${finalSelector})`);
+            lines.push(`            self.scroll_to(selector)`);
             lines.push(`        except Exception:`);
             lines.push(`            pass  # Continue even if scroll fails`);
             lines.push(
-              `        self.wait_for_element_clickable(${finalSelector}, timeout=10)`
+              `        self.wait_for_element_clickable(selector, timeout=10)`
             );
             lines.push(
-              `        self.select_option_by_value(${finalSelector}, '${sval.replace(
+              `        self.select_option_by_value(selector, '${sval.replace(
                 /'/g,
                 "\\'"
               )}')`
@@ -1188,9 +1234,17 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           isChecked = Boolean(val);
         }
 
+        // Generate selector list for finding working checkbox element
+        const selectorList = action.selectorList || [selector];
+        const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
+        lines.push(`        # Try multiple selectors to find a working one`);
+        lines.push(`        selector_list = [${pythonSelectorList}]`);
+        lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+        lines.push(`        `);
+
         // For XPath selectors ending with '/input', we need to handle custom checkbox components (like Ant Design)
         // Strip the '/input' suffix and click the parent element instead
-        let checkboxSelector = selector;
+        let checkboxSelector = 'selector';  // Use the variable name instead of the actual selector
         let isCustomCheckbox = false;
 
         if (
@@ -1201,14 +1255,21 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           // This is an XPath ending with /input or /input[n]
           // For custom checkboxes (Ant Design, Material-UI), the input is hidden
           // We should click the parent container instead
-          checkboxSelector = selector.replace(/\/input(\[\d+\])?$/, "");
           isCustomCheckbox = true;
           console.log(
-            `Background: Detected custom checkbox, adjusted selector from ${selector} to ${checkboxSelector}`
+            `Background: Detected custom checkbox, will adjust selector in Python code`
           );
+          // Generate Python code to adjust the selector
+          lines.push(`        # Adjust selector for custom checkbox (Ant Design, etc.)`);
+          lines.push(`        import re`);
+          lines.push(`        if selector.startswith('/') and re.search(r'/input(\\[\\d+\\])?$', selector):`);
+          lines.push(`            checkboxSelector = re.sub(r'/input(\\[\\d+\\])?$', '', selector)`);
+          lines.push(`        else:`);
+          lines.push(`            checkboxSelector = selector`);
+          checkboxSelector = 'checkboxSelector';
         }
 
-        const finalCheckboxSelector = quotePythonString(checkboxSelector);
+        const finalCheckboxSelector = checkboxSelector;  // Already a variable name, no quote needed
 
         // Check if this checkbox requires scroll-to-enable behavior
         if (action.needsScrollToEnable && action.scrollAreaSelector) {
@@ -1266,10 +1327,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           );
           lines.push(`            current_checked = self.execute_script(`);
           lines.push(
-            `                "return document.evaluate(${finalSelector.replace(
-              /'/g,
-              "\\'"
-            )}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.checked"`
+            `                f"return document.evaluate('{selector}', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.checked"`
           );
           lines.push(`            )`);
           lines.push(`            if current_checked != target_checked:`);
@@ -1314,23 +1372,31 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         }
 
         if (isSelected) {
+          // Generate selector list for finding working radio button element
+          const selectorList = action.selectorList || [selector];
+          const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
+          
           // For radio buttons, we usually only record the selected one
           const radioValue = action.radioValue || "";
           const radioName = action.radioName || "";
           lines.push(
             `        # Radio button selected: name="${radioName}" value="${radioValue}"`
           );
+          lines.push(`        # Try multiple selectors to find a working one`);
+          lines.push(`        selector_list = [${pythonSelectorList}]`);
+          lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+          lines.push(`        `);
           lines.push(`        try:`);
           lines.push(
-            `            self.wait_for_element_present(${finalSelector}, timeout=5)`
+            `            self.wait_for_element_present(selector, timeout=5)`
           );
-          lines.push(`            self.scroll_to(${finalSelector})`);
+          lines.push(`            self.scroll_to(selector)`);
           lines.push(`        except Exception:`);
           lines.push(`            pass  # Continue even if scroll fails`);
           lines.push(
-            `        self.wait_for_element_clickable(${finalSelector}, timeout=10)`
+            `        self.wait_for_element_clickable(selector, timeout=10)`
           );
-          lines.push(`        self.click(${finalSelector})`);
+          lines.push(`        self.click(selector)`);
         }
         break;
       }
@@ -1347,9 +1413,17 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         const methodNote =
           method === "drag-drop" ? " (drag & drop)" : " (click upload)";
 
+        // Generate selector list for finding working upload element
+        const selectorList = action.selectorList || [selector];
+        const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
+        
         lines.push(
-          `        # File upload${methodNote} detected for ${finalSelector} -> ${filesDisplay}`
+          `        # File upload${methodNote} detected -> ${filesDisplay}`
         );
+        lines.push(`        # Try multiple selectors to find a working one`);
+        lines.push(`        selector_list = [${pythonSelectorList}]`);
+        lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+        lines.push(`        `);
 
         if (method === "drag-drop" && action.dropCoordinates) {
           // For drag-drop uploads, we might want to add additional context
@@ -1369,9 +1443,9 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             lines.push(
               `        # Note: This was a drag-and-drop upload. SeleniumBase will use choose_file() anyway.`
             );
-            lines.push(`        self.choose_file(${finalSelector}, file_path)`);
+            lines.push(`        self.choose_file(selector, file_path)`);
           } else {
-            lines.push(`        self.choose_file(${finalSelector}, file_path)`);
+            lines.push(`        self.choose_file(selector, file_path)`);
           }
 
           if (fileList.length > 1) {
@@ -1381,7 +1455,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           }
         } else {
           lines.push(
-            `        # Example (adjust path): self.choose_file(${finalSelector}, "path/to/your/file.ext")`
+            `        # Example (adjust path): self.choose_file(selector, "path/to/your/file.ext")`
           );
         }
         break;
@@ -1398,8 +1472,13 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
       case "DragAndDrop": {
         const sourceSelector = action.sourceSelector || "";
         const targetSelector = action.targetSelector || "";
-        const quotedSourceSel = quotePythonString(sourceSelector);
-        const quotedTargetSel = quotePythonString(targetSelector);
+        
+        // Generate selector lists for both source and target
+        const sourceSelectorList = action.sourceSelectorList || [sourceSelector];
+        const targetSelectorList = action.targetSelectorList || [targetSelector];
+        
+        const pythonSourceList = sourceSelectorList.map(s => quotePythonString(s)).join(', ');
+        const pythonTargetList = targetSelectorList.map(s => quotePythonString(s)).join(', ');
 
         // Enhanced DND-Kit support
         if (action.isDndKit) {
@@ -1421,8 +1500,11 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
               `        # Insertion: ${action.insertionType} existing item`
             );
           }
-          lines.push(`        source_xpath = ${quotedSourceSel}`);
-          lines.push(`        target_xpath = ${quotedTargetSel}`);
+          lines.push(`        # Try multiple selectors for source and target`);
+          lines.push(`        source_list = [${pythonSourceList}]`);
+          lines.push(`        target_list = [${pythonTargetList}]`);
+          lines.push(`        source_xpath = self.findWorkingSelector(source_list)`);
+          lines.push(`        target_xpath = self.findWorkingSelector(target_list)`);
           lines.push(
             `        perform_dnd_kit_drag(self, source_xpath, target_xpath)`
           );
@@ -1430,37 +1512,56 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           // Check if it's modern_components_test.html, use specialized drag function
           const isModernComponents =
             startURL && startURL.includes("modern_components_test.html");
+          
+          lines.push(`        # Try multiple selectors for source and target`);
+          lines.push(`        source_list = [${pythonSourceList}]`);
+          lines.push(`        target_list = [${pythonTargetList}]`);
+          lines.push(`        source_sel = self.findWorkingSelector(source_list)`);
+          lines.push(`        target_sel = self.findWorkingSelector(target_list)`);
+          lines.push(`        `);
+          
           if (isModernComponents) {
             lines.push(
               `        # Using drag function optimized for modern_components_test.html`
             );
             lines.push(
-              `        perform_modern_drag(self, ${quotedSourceSel}, ${quotedTargetSel})`
+              `        perform_modern_drag(self, source_sel, target_sel)`
             );
           } else {
             lines.push(
-              `        perform_drag_with_fallback(self, ${quotedSourceSel}, ${quotedTargetSel})`
+              `        perform_drag_with_fallback(self, source_sel, target_sel)`
             );
           }
         } else {
-          lines.push(
-            `        self.drag_and_drop(${quotedSourceSel}, ${quotedTargetSel})`
-          );
+          lines.push(`        # Try multiple selectors for source and target`);
+          lines.push(`        source_list = [${pythonSourceList}]`);
+          lines.push(`        target_list = [${pythonTargetList}]`);
+          lines.push(`        source_sel = self.findWorkingSelector(source_list)`);
+          lines.push(`        target_sel = self.findWorkingSelector(target_list)`);
+          lines.push(`        self.drag_and_drop(source_sel, target_sel)`);
         }
         break;
       }
       case "Hover": {
         // Hover over the element with safe error handling
+        // Generate selector list for finding working hover element
+        const selectorList = action.selectorList || [selector];
+        const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
+        
         lines.push(`        # Hover action - wait for element before hovering`);
+        lines.push(`        # Try multiple selectors to find a working one`);
+        lines.push(`        selector_list = [${pythonSelectorList}]`);
+        lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+        lines.push(`        `);
         lines.push(`        try:`);
         lines.push(
-          `            self.wait_for_element_present(${finalSelector}, timeout=5)`
+          `            self.wait_for_element_present(selector, timeout=5)`
         );
-        lines.push(`            self.scroll_to(${finalSelector})`);
-        lines.push(`            self.hover(${finalSelector})`);
+        lines.push(`            self.scroll_to(selector)`);
+        lines.push(`            self.hover(selector)`);
         lines.push(`        except Exception as e:`);
         lines.push(
-          `            print(f"Hover action skipped for ${finalSelector}: {e}")`
+          `            print(f"Hover action skipped for {selector}: {e}")`
         );
         break;
       }
