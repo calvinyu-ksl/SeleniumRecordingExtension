@@ -21,6 +21,13 @@
     "Selenium Recorder: Content script injected (v13 - improved class selectors)."
   ); // Version info for debugging
 
+  // --- Track sent pages to avoid duplicate API calls ---
+  let sentPages = new Set();
+  const flowName = `FLOW_${Date.now()}`;
+  let stepOrderCounter = 1; // Track step order across all actions
+  
+  console.log(`[API] Flow name: ${flowName}`);
+  
   // --- Inject API interceptor into page context (fetch + XHR) ---
   (function injectApiInterceptor() {
     // Intercept fetch/XHR and forward API information to background
@@ -789,8 +796,9 @@
 
       // 獲取當前頁面 URL
       const pageUrl = window.location.href;
-      //create page if not exists
-      if(pageUrl!==window.location.href){
+      
+      // Create page data and send to API (only once per unique URL)
+      if (!sentPages.has(pageUrl)) {
         const createPageAPIPayload = {
           pages: [
             {
@@ -800,24 +808,33 @@
             },
           ],
         };
-        console.log("[API] Sending new page data to API:", createPageAPIPayload);
-        const createPageResponse = await fetch("http://127.0.0.1:5000/api/create_pages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(createPageAPIPayload),
-        });
-        if (createPageResponse.ok) {
-          const createPageResult = await createPageResponse.json();
-          console.log("[API] ✅ Page data sent successfully:", createPageResult);
-        } else {
-          console.log(
-            "[API] ❌ Failed to send page data:",
-            createPageResponse.status,
-            createPageResponse.statusText
-          );
+        console.log("[API] Sending page data to API (first time for this URL):", createPageAPIPayload);
+        
+        try {
+          const createPageResponse = await fetch("http://127.0.0.1:5000/api/create_pages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(createPageAPIPayload),
+          });
+          if (createPageResponse.ok) {
+            const createPageResult = await createPageResponse.json();
+            console.log("[API] ✅ Page data sent successfully:", createPageResult);
+            // Mark this page as sent
+            sentPages.add(pageUrl);
+          } else {
+            console.log(
+              "[API] ❌ Failed to send page data:",
+              createPageResponse.status,
+              createPageResponse.statusText
+            );
+          }
+        } catch (error) {
+          console.log("[API] ❌ Error sending page data:", error);
         }
+      } else {
+        console.log("[API] Page already sent, skipping:", pageUrl);
       }
 
       // 提取元素基本信息
@@ -850,51 +867,40 @@
           element.getAttribute("title") ||
           element.getAttribute("alt") ||
           `${tagName} element`;
-
-      // 生成 locators
+      
+      // 生成 locators - 只使用絕對 XPath (例如: /html/body/input[2])
       const locators = {};
 
-      // ID - 被操作元素的 ID 屬性
-      if (element.id) {
-        locators.id = element.id;
+      // XPath - 只接受絕對路徑 XPath (以 /html 開頭)，不接受 ID-based XPath 或 CSS selectors
+      let absoluteXPath = null;
+      
+      // 如果 actionData.selector 是絕對路徑 XPath (以 /html 開頭)，使用它
+      if (actionData.selector && actionData.selector.startsWith('/html')) {
+        absoluteXPath = actionData.selector;
       }
-
-      // Name - name 屬性
-      if (element.name || element.getAttribute("name")) {
-        locators.name = element.name || element.getAttribute("name");
-      }
-
-      // CSS Selector - 生成 CSS 定位器
-      try {
-        let cssSelector = tagName;
-        if (element.id) {
-          cssSelector = `#${element.id}`;
-        } else if (element.className) {
-          const classes = element.className
-            .split(" ")
-            .filter((c) => c.trim())
-            .slice(0, 2);
-          if (classes.length > 0) {
-            cssSelector = `${tagName}.${classes.join(".")}`;
+      // 如果 actionData.selectorList 存在，從中找出絕對路徑 XPath
+      else if (actionData.selectorList && Array.isArray(actionData.selectorList)) {
+        // 找出以 /html 開頭的 selector（絕對路徑 XPath）
+        for (let i = actionData.selectorList.length - 1; i >= 0; i--) {
+          const selector = actionData.selectorList[i];
+          if (selector && selector.startsWith('/html')) {
+            absoluteXPath = selector;
+            break;
           }
         }
-        locators.css = cssSelector;
-      } catch (e) {
-        locators.css = tagName;
       }
-
-      // XPath - 使用 action 中的 selector 或生成新的
-      if (actionData.selector && actionData.selectorType === "XPath") {
-        locators.xpath = actionData.selector;
-      } else {
+      
+      // 如果還是沒有，從元素直接生成絕對 XPath
+      if (!absoluteXPath) {
         try {
-          const xpath = generateAbsoluteXPath(element);
-          if (xpath) {
-            locators.xpath = xpath;
-          }
+          absoluteXPath = generateAbsoluteXPath(element);
         } catch (e) {
-          console.log("[API] Error generating XPath:", e);
+          console.log("[API] Error generating absolute XPath:", e);
         }
+      }
+      
+      if (absoluteXPath) {
+        locators.xpath = absoluteXPath;
       }
 
       // CSS 樣式屬性 (attributes)
@@ -955,22 +961,40 @@
       if (element.getAttribute("src")) {
         attributes.src = element.getAttribute("src");
       }
-
+      
+      // 獲取 action value (根據不同的 action 類型)
+      let actionValue = "";
+      if (actionData.value !== undefined && actionData.value !== null) {
+        actionValue = String(actionData.value);
+      } else if (element.value) {
+        actionValue = element.value;
+      } else if (element.textContent) {
+        actionValue = element.textContent.trim();
+      }
+      console.log(locators.xpath);
       // 構建發送到 API 的 payload - 按照用戶指定的格式
       const payload = {
-        pageUrl: pageUrl, // Mandatory field
-        tagName: tagName, // Mandatory field
-        type: type,
-        text: text.substring(0, 200), // 限制文字長度
-        locators: locators,
-        attributes: attributes,
+        steps: [
+          {
+            flowName: flowName,
+            pageUrl: pageUrl,
+            stepOrder: stepOrderCounter++, // 自動遞增步驟順序
+            elementLocators: {
+              id: locators.id || "",
+              css: locators.css || "",
+              xpath: locators.xpath || "",
+            },
+            stepAction: 'type', // 使用原始的 actionType (click, input, select 等)
+            actionValue: actionValue,
+          }
+        ]
       };
 
-      console.log("[API] Sending action data to API:", payload);
+      console.log("[API] Sending step data to API:", payload);
 
       // 發送到用戶的 API 端點
       const response = await fetch(
-        "http://127.0.0.1:5000/api/create_new_element",
+        "http://127.0.0.1:5000/api/create_steps",
         {
           method: "POST",
           headers: {
