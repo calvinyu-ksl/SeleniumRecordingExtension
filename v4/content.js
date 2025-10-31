@@ -17,16 +17,10 @@
   }
   window.__SELBAS_CONTENT_SCRIPT_LOADED__ = true;
 
-  console.log(
-    "Selenium Recorder: Content script injected (v13 - improved class selectors)."
-  ); // Version info for debugging
-
   // --- Track sent pages to avoid duplicate API calls ---
   let sentPages = new Set();
   const flowName = `FLOW_${Date.now()}`;
   let stepOrderCounter = 1; // Track step order across all actions
-  
-  console.log(`[API] Flow name: ${flowName}`);
   
   // --- Inject API interceptor into page context (fetch + XHR) ---
   (function injectApiInterceptor() {
@@ -394,7 +388,6 @@
       const selector = `[data-dnd-kit-id="${CSS.escape(dndKitId)}"]`;
       try {
         if (document.querySelectorAll(selector).length === 1) {
-          console.log(`✅ DND-Kit ID selector: ${selector}`);
           return selector;
         }
       } catch (e) {
@@ -410,7 +403,6 @@
       )}"]`;
       try {
         if (document.querySelectorAll(selector).length === 1) {
-          console.log(`✅ DND-Kit Droppable selector: ${selector}`);
           return selector;
         }
       } catch (e) {
@@ -426,7 +418,6 @@
       )}"]`;
       try {
         if (document.querySelectorAll(selector).length === 1) {
-          console.log(`✅ DND-Kit Drop Zone selector: ${selector}`);
           return selector;
         }
       } catch (e) {
@@ -447,7 +438,6 @@
         const selector = `#${CSS.escape(id)}`;
         try {
           if (document.querySelectorAll(selector).length === 1) {
-            console.log(`✅ Drag ID selector: ${selector}`);
             return selector;
           }
         } catch (e) {
@@ -467,7 +457,6 @@
         )}"]`;
         try {
           if (document.querySelectorAll(selector).length === 1) {
-            console.log(`✅ Parent Droppable selector: ${selector}`);
             return selector;
           }
         } catch (e) {
@@ -482,7 +471,6 @@
         const childSelector = `${parentSelector} ${tagName}`;
         try {
           if (document.querySelectorAll(childSelector).length === 1) {
-            console.log(`✅ Child selector: ${childSelector}`);
             return childSelector;
           }
           // If there are multiple children of same type, use nth-child
@@ -493,7 +481,6 @@
                 const nthSelector = `${parentSelector} ${tagName}:nth-child(${
                   i + 1
                 })`;
-                console.log(`✅ nth-child selector: ${nthSelector}`);
                 return nthSelector;
               }
             }
@@ -506,7 +493,6 @@
     }
 
     // 6. Fallback to regular robust selector
-    console.log(`⚠️ Drag selector falling back to regular selector`);
     return generateRobustSelector(el);
   }
 
@@ -708,7 +694,6 @@
     // 1. ID XPath (ONLY if element has id attribute)
     if (el.id) {
       const id = el.id;
-      console.log(`[ID Check] Element has ID: "${id}"`);
       // Use ID XPath directly without stability checks
       try {
         const xpathSelector = `//*[@id="${id}"]`;
@@ -719,28 +704,18 @@
           XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
           null
         ).snapshotLength;
-        console.log(
-          `[ID Check] XPath selector "${xpathSelector}" matches: ${snapshotLength}`
-        );
         if (snapshotLength === 1) {
-          console.log(
-            `✅ Priority 1: Using ID XPath selector: ${xpathSelector}`
-          );
           return xpathSelector;
         }
       } catch (e) {
         console.error(`[ID Check] XPath selector failed:`, e);
       }
-    } else {
-      console.log(`[ID Check] Element has NO ID`);
     }
 
     // 2. Absolute XPath (fallback for all cases without ID)
-    console.log("✅ Priority 2: Using Absolute XPath...");
     try {
       let absXPath = generateAbsoluteXPath(el);
       if (absXPath) {
-        console.log(`✅ Priority 2: Using Absolute XPath: ${absXPath}`);
         return trimNonInteractiveXPathTail(absXPath);
       } else {
         console.error(
@@ -776,25 +751,23 @@
   }
 
   /**
-   * 將錄製的 action 數據發送到用戶的 API
-   * @param {Element} element - 被操作的 HTML 元素
-   * @param {string} actionType - 操作類型 (click, input, select 等)
-   * @param {Object} actionData - 完整的 action 數據
+   * Send recorded action data to user's custom API
+   * @param {Element} element - The HTML element being operated on
+   * @param {string} actionType - Action type (click, input, select, etc.)
+   * @param {Object} actionData - Complete action data object
    */
   async function sendActionToAPI(element, actionType, actionData) {
     try {
-      // 只有在錄製進行中時才發送到 API
+      // Only send to API when recording is active
       if (!isListenerAttached) {
-        console.log("[API] Recording not active, skipping API call");
         return;
       }
 
       if (!element || !actionData) {
-        console.log("[API] Missing element or action data, skipping API call");
         return;
       }
 
-      // 獲取當前頁面 URL
+      // Get current page URL
       const pageUrl = window.location.href;
       
       // Create page data and send to API (only once per unique URL)
@@ -808,7 +781,6 @@
             },
           ],
         };
-        console.log("[API] Sending page data to API (first time for this URL):", createPageAPIPayload);
         
         try {
           const createPageResponse = await fetch("http://127.0.0.1:5000/api/create_pages", {
@@ -820,29 +792,26 @@
           });
           if (createPageResponse.ok) {
             const createPageResult = await createPageResponse.json();
-            console.log("[API] ✅ Page data sent successfully:", createPageResult);
             // Mark this page as sent
             sentPages.add(pageUrl);
           } else {
             console.log(
-              "[API] ❌ Failed to send page data:",
+              "[API] Failed to send page data:",
               createPageResponse.status,
               createPageResponse.statusText
             );
           }
         } catch (error) {
-          console.log("[API] ❌ Error sending page data:", error);
+          console.log("[API] Error sending page data:", error);
         }
-      } else {
-        console.log("[API] Page already sent, skipping:", pageUrl);
       }
 
-      // 提取元素基本信息
+      // Extract basic element information
       const tagName = element.tagName
         ? element.tagName.toLowerCase()
         : "unknown";
 
-      // 根據 actionType 和 tagName 確定 type
+      // Determine type based on actionType and tagName
       let type = actionType;
       if (tagName === "a") {
         type = "link";
@@ -859,7 +828,7 @@
         type = "textarea";
       }
 
-      // 提取元素文字內容
+      // Extract element text content
       const text = element.textContent
         ? element.textContent.trim()
         : element.value ||
@@ -868,19 +837,19 @@
           element.getAttribute("alt") ||
           `${tagName} element`;
       
-      // 生成 locators - 只使用絕對 XPath (例如: /html/body/input[2])
+      // Generate locators - only use absolute XPath (e.g., /html/body/input[2])
       const locators = {};
 
-      // XPath - 只接受絕對路徑 XPath (以 /html 開頭)，不接受 ID-based XPath 或 CSS selectors
+      // XPath - only accept absolute path XPath (starts with /html), not ID-based XPath or CSS selectors
       let absoluteXPath = null;
       
-      // 如果 actionData.selector 是絕對路徑 XPath (以 /html 開頭)，使用它
+      // If actionData.selector is absolute path XPath (starts with /html), use it
       if (actionData.selector && actionData.selector.startsWith('/html')) {
         absoluteXPath = actionData.selector;
       }
-      // 如果 actionData.selectorList 存在，從中找出絕對路徑 XPath
+      // If actionData.selectorList exists, find absolute path XPath from it
       else if (actionData.selectorList && Array.isArray(actionData.selectorList)) {
-        // 找出以 /html 開頭的 selector（絕對路徑 XPath）
+        // Find selector that starts with /html (absolute path XPath)
         for (let i = actionData.selectorList.length - 1; i >= 0; i--) {
           const selector = actionData.selectorList[i];
           if (selector && selector.startsWith('/html')) {
@@ -890,7 +859,7 @@
         }
       }
       
-      // 如果還是沒有，從元素直接生成絕對 XPath
+      // If still not found, generate absolute XPath from element directly
       if (!absoluteXPath) {
         try {
           absoluteXPath = generateAbsoluteXPath(element);
@@ -903,23 +872,23 @@
         locators.xpath = absoluteXPath;
       }
 
-      // CSS 樣式屬性 (attributes)
+      // CSS style attributes
       const attributes = {};
 
-      // 提取 CSS 相關的樣式屬性
+      // Extract CSS-related style attributes
       if (element.style && element.style.cssText) {
-        // 解析 inline style
+        // Parse inline style
         const styleText = element.style.cssText;
         if (styleText) {
           attributes.style = styleText;
         }
       }
 
-      // 提取 computed styles 的重要屬性
+      // Extract important computed styles attributes
       try {
         const computedStyle = window.getComputedStyle(element);
         if (computedStyle) {
-          // 選取重要的 CSS 屬性
+          // Select important CSS properties
           const importantStyleProps = [
             "color",
             "background-color",
@@ -951,7 +920,7 @@
         console.log("[API] Error getting computed styles:", e);
       }
 
-      // 也包含一些重要的 HTML 屬性作為參考
+      // Also include some important HTML attributes for reference
       if (element.className) {
         attributes.class = element.className;
       }
@@ -962,7 +931,7 @@
         attributes.src = element.getAttribute("src");
       }
       
-      // 獲取 action value (根據不同的 action 類型)
+      // Get action value (based on different action types)
       let actionValue = "";
       if (actionData.value !== undefined && actionData.value !== null) {
         actionValue = String(actionData.value);
@@ -971,28 +940,42 @@
       } else if (element.textContent) {
         actionValue = element.textContent.trim();
       }
-      console.log(locators.xpath);
-      // 構建發送到 API 的 payload - 按照用戶指定的格式
+      
+      // Map internal action types to API's accepted stepAction values
+      // API accepts: 'click', 'type', 'select', 'setValue', 'visit', 'wait', 'operation', 'assertion', 'search', 'switch', 'drag'
+      let stepAction = 'operation'; // Default fallback
+      
+      if (actionType === 'click') {
+        stepAction = 'click';
+      } else if (actionType === 'input') {
+        stepAction = 'type';
+      } else if (actionType === 'select') {
+        stepAction = 'select';
+      } else if (actionType === 'change') {
+        stepAction = 'setValue';
+      } else if (actionType === 'slider') {
+        stepAction = 'setValue';
+      } else if (actionType === 'drag') {
+        stepAction = 'drag';
+      }
+      
+      // Build payload to send to API - according to user's specified format
       const payload = {
         steps: [
           {
             flowName: flowName,
             pageUrl: pageUrl,
-            stepOrder: stepOrderCounter++, // 自動遞增步驟順序
+            stepOrder: stepOrderCounter++, // Auto-increment step order
             elementLocators: {
-              id: locators.id || "",
-              css: locators.css || "",
               xpath: locators.xpath || "",
             },
-            stepAction: 'type', // 使用原始的 actionType (click, input, select 等)
+            stepAction: stepAction,
             actionValue: actionValue,
           }
         ]
       };
 
-      console.log("[API] Sending step data to API:", payload);
-
-      // 發送到用戶的 API 端點
+      // Send to user's API endpoint
       const response = await fetch(
         "http://127.0.0.1:5000/api/create_steps",
         {
@@ -1006,17 +989,16 @@
 
       if (response.ok) {
         const result = await response.json();
-        console.log("[API] ✅ Action data sent successfully:", result);
       } else {
         console.log(
-          "[API] ❌ Failed to send action data:",
+          "[API] Failed to send action data:",
           response.status,
           response.statusText
         );
       }
     } catch (error) {
-      console.log("[API] ❌ Error sending action data to API:", error);
-      // 不要讓 API 錯誤影響正常的錄製功能
+      console.log("[API] Error sending action data to API:", error);
+      // Don't let API errors affect normal recording functionality
     }
   }
 
@@ -1085,15 +1067,6 @@
       const clickY = event.clientY;
       const elementAtPoint = document.elementFromPoint(clickX, clickY);
 
-      console.log(
-        `[CLICK-DEBUG] Raw target: ${rawTarget.tagName} (${rawTarget.className})`
-      );
-      console.log(
-        `[CLICK-DEBUG] Element at point: ${
-          elementAtPoint ? elementAtPoint.tagName : "null"
-        } (${elementAtPoint ? elementAtPoint.className : "null"})`
-      );
-
       let actualTarget = rawTarget;
 
       // PRIORITY 0: Ant Design Select options - use data-* attributes and text content
@@ -1102,12 +1075,6 @@
           '.ant-select-item, .ant-select-item-option, [class*="rc-select-item"]'
         );
         if (antSelectItem) {
-          console.log(
-            `[CLICK] 🎯 ANT DESIGN SELECT ITEM detected:`,
-            antSelectItem
-          );
-          console.log(`[CLICK] Item text:`, antSelectItem.textContent);
-          console.log(`[CLICK] Item classes:`, antSelectItem.className);
           actualTarget = antSelectItem;
         }
 
@@ -1121,21 +1088,8 @@
             'input[type="radio"]'
           );
           if (radioInput) {
-            console.log(
-              `[CLICK] 🎯 ANT DESIGN RADIO BUTTON detected:`,
-              radioInput
-            );
-            console.log(`[CLICK] Radio value:`, radioInput.value);
-            console.log(
-              `[CLICK] Radio wrapper text:`,
-              antRadioWrapper.textContent.trim()
-            );
             actualTarget = radioInput;
           } else {
-            console.log(
-              `[CLICK] ⚠️ ANT DESIGN RADIO WRAPPER found but no input:`,
-              antRadioWrapper
-            );
             actualTarget = antRadioWrapper;
           }
         }
@@ -1152,20 +1106,12 @@
           parentList &&
           (rawTarget === parentList || parentList.contains(rawTarget))
         ) {
-          console.log(
-            `[CLICK] 🎯 FORCE using LI instead of container:`,
-            elementAtPoint
-          );
           actualTarget = elementAtPoint;
         }
       }
       // PRIORITY 1.5: If rawTarget is inside an LI, use the LI instead
       else if (rawTarget.closest && rawTarget.closest("li")) {
         const liElement = rawTarget.closest("li");
-        console.log(
-          `[CLICK] 🎯 FOUND LI ancestor for ${rawTarget.tagName}:`,
-          liElement
-        );
         actualTarget = liElement;
       }
       // PRIORITY 2: If rawTarget is UL/OL and elementAtPoint is different, prefer elementAtPoint
@@ -1176,10 +1122,6 @@
         elementAtPoint !== rawTarget &&
         rawTarget.contains(elementAtPoint)
       ) {
-        console.log(
-          `[CLICK] 🎯 REPLACING ${rawTarget.tagName} with ${elementAtPoint.tagName}:`,
-          elementAtPoint
-        );
         actualTarget = elementAtPoint;
       }
       // PRIORITY 3: General container replacement logic
@@ -1225,17 +1167,9 @@
           isMoreSpecific &&
           rawTarget.contains(elementAtPoint)
         ) {
-          console.log(
-            `[CLICK] ✅ Refining container ${rawTarget.tagName} to ${elementAtPoint.tagName}:`,
-            elementAtPoint
-          );
           actualTarget = elementAtPoint;
         }
       }
-
-      console.log(
-        `[CLICK-FINAL] Using target: ${actualTarget.tagName} (${actualTarget.className})`
-      );
 
       // Store if we deliberately chose a specific target (like LI over UL)
       const wasTargetRefined = actualTarget !== rawTarget;
@@ -1260,9 +1194,6 @@
           clickableAncestor.tagName.toLowerCase()
         )
       ) {
-        console.log(
-          `[CLICK] 🚫 Preventing clickableAncestor override: keeping ${actualTarget.tagName} instead of ${clickableAncestor.tagName}`
-        );
         targetForSelector = actualTarget; // Keep our refined target
       } else {
         targetForSelector = clickableAncestor || anchorEl || actualTarget;
@@ -1283,22 +1214,14 @@
           const titleAttr = targetForSelector.getAttribute("title");
           const dataValue = targetForSelector.getAttribute("data-value");
 
-          console.log(
-            `[CLICK] 🎯 Generating selector for Ant Design Select option:`,
-            optionText
-          );
-
           // Build a more reliable XPath using text content
           if (optionText) {
             // Use text-based XPath that is more stable
             selector = `//*[contains(@class, 'ant-select-item') and normalize-space(text())='${optionText}']`;
-            console.log(`[CLICK] ✅ Using text-based selector: ${selector}`);
           } else if (titleAttr) {
             selector = `//*[contains(@class, 'ant-select-item') and @title='${titleAttr}']`;
-            console.log(`[CLICK] ✅ Using title-based selector: ${selector}`);
           } else if (dataValue) {
             selector = `//*[contains(@class, 'ant-select-item') and @data-value='${dataValue}']`;
-            console.log(`[CLICK] ✅ Using data-value selector: ${selector}`);
           } else {
             // Fallback to absolute XPath
             const abs = generateAbsoluteXPath(targetForSelector);
@@ -1321,22 +1244,12 @@
           );
           const labelText = wrapper ? wrapper.textContent.trim() : "";
 
-          console.log(
-            `[CLICK] 🎯 Generating selector for Ant Design Radio button:`,
-            radioValue,
-            labelText
-          );
-
           // Build a reliable XPath using value attribute
           if (radioValue !== undefined && radioValue !== "") {
             selector = `//input[@type='radio' and @value='${radioValue}']`;
-            console.log(`[CLICK] ✅ Using value-based selector: ${selector}`);
           } else if (labelText) {
             // Use label text if no value
             selector = `//*[contains(@class, 'ant-radio-button-wrapper') and normalize-space(text())='${labelText}']//input[@type='radio']`;
-            console.log(
-              `[CLICK] ✅ Using label-text-based selector: ${selector}`
-            );
           } else {
             // Fallback to absolute XPath
             const abs = generateAbsoluteXPath(targetForSelector);
@@ -1348,12 +1261,6 @@
           selectorList = generateSelectorList(targetForSelector);
           selector = selectorList.length > 0 ? selectorList[0] : null;
         }
-        console.log(
-          `Content: Generated click selectors for element:`,
-          targetForSelector,
-          `primary: ${selector}`,
-          `list: [${selectorList.join(', ')}]`
-        );
       } catch (e) {
         console.error("Content: Error generating selector:", e);
         selector = null;
@@ -1417,7 +1324,7 @@
       try {
         chrome.runtime.sendMessage({ command: "record_action", data: action });
 
-        // 將 action 數據發送到用戶的 API
+        // Send action data to user's API
         sendActionToAPI(targetForSelector, "click", action);
       } catch (e) {
         console.warn("Content: failed to send click action:", e);
@@ -1605,10 +1512,6 @@
               if (verticalDistance < 100 && horizontalOverlap) {
                 needsScrollToEnable = true;
                 scrollArea = container;
-                console.log(
-                  "[CHECKBOX] Detected scroll-to-enable pattern with overflow container:",
-                  container
-                );
                 break;
               }
             }
@@ -1658,7 +1561,6 @@
 
     // Send the recorded action if one was created
     if (actionData) {
-      console.log("handleChange: Action recorded (Content):", actionData);
       try {
         chrome.runtime
           .sendMessage({ command: "record_action", data: actionData })
@@ -1677,7 +1579,7 @@
             }
           });
 
-        // 將 action 數據發送到用戶的 API
+        // Send action data to user's API
         const actionType = actionData.type === "Select" ? "select" : "change";
         sendActionToAPI(event.target, actionType, actionData);
       } catch (error) {
@@ -1748,7 +1650,7 @@
         .sendMessage({ command: "record_action", data: action })
         .catch(() => {});
 
-      // 將 action 數據發送到用戶的 API
+      // Send action data to user's API
       sendActionToAPI(el, "slider", action);
     } catch (e) {
       // ignore
@@ -1782,18 +1684,8 @@
 
       // If not autocomplete input, don't record real-time input
       if (!isAutocomplete) {
-        console.log(
-          "[Input] Skipping non-autocomplete input:",
-          el,
-          "type:",
-          type,
-          "tag:",
-          tag
-        );
         return;
       }
-
-      console.log("[Input] Processing autocomplete input:", el);
 
       // For tiny autocomplete internal input, prefer outer wrapper XPath; otherwise use its own absolute XPath
       let selector = null;
@@ -1852,12 +1744,11 @@
         timestamp: Date.now(),
         source: "autocomplete-input", // Mark source for debugging
       };
-      console.log("[Input] Recording autocomplete input action:", action);
       chrome.runtime
         .sendMessage({ command: "record_action", data: action })
         .catch(() => {});
 
-      // 將 action 數據發送到用戶的 API
+      // Send action data to user's API
       sendActionToAPI(el, "input", action);
     } catch (e) {
       /* ignore */
@@ -1953,13 +1844,11 @@
         (tag === "input" && el.classList.contains("ant-input-number-input"));
 
       if (!isTextLikeInput) {
-        console.log("[Input] Not text-like input:", tag, type, role);
         return;
       }
 
       // If autocomplete input, don't handle here (already handled in input events)
       if (isAutocompleteInput(el)) {
-        console.log("[Input] Skipping blur for autocomplete input:", el);
         return;
       }
 
@@ -1977,10 +1866,6 @@
           );
           if (wrapper && wrapper.parentElement) {
             selector = generateAbsoluteXPath(wrapper.parentElement);
-            console.log(
-              "[Input] Using Ant InputNumber wrapper for selector:",
-              selector
-            );
           } else {
             selector = generateRobustSelector(el);
           }
@@ -1995,7 +1880,6 @@
       // Prevent meaningless recording of empty or very short values
       const value = el.value != null ? String(el.value) : "";
       if (value.length === 0) {
-        console.log("[Input] Skipping empty input value");
         return;
       }
 
@@ -2006,9 +1890,6 @@
         const timeDiff = now - lastRecord.timestamp;
         // If same value recorded within dedup window, skip
         if (lastRecord.value === value && timeDiff < INPUT_DEDUP_WINDOW_MS) {
-          console.log(
-            `[Input] Skipping duplicate input for ${selector}: "${value}" (${timeDiff}ms ago)`
-          );
           return;
         }
         // If different value but both are case-variants (e.g., "Surname" vs "SURNAME")
@@ -2017,9 +1898,6 @@
           lastRecord.value !== value &&
           timeDiff < INPUT_DEDUP_WINDOW_MS
         ) {
-          console.log(
-            `[Input] Auto-capitalization detected for ${selector}: "${lastRecord.value}" → "${value}"`
-          );
           // Update to final value and skip duplicate
           lastRecordedInputs.set(selector, { value, timestamp: now });
           return;
@@ -2038,12 +1916,11 @@
         timestamp: Date.now(),
         source: "blur", // Mark source for debugging
       };
-      console.log("[Input] Recording blur input action:", action);
       chrome.runtime
         .sendMessage({ command: "record_action", data: action })
         .catch(() => {});
 
-      // 將 action 數據發送到用戶的 API
+      // Send action data to user's API
       sendActionToAPI(el, "input", action);
     } catch (e) {
       console.warn("handleBlurEvent error:", e);
@@ -2086,18 +1963,9 @@
 
       // Only autocomplete inputs record on composition end, regular inputs record on blur
       if (!isAutocomplete) {
-        console.log(
-          "[IME] Skipping composition end for non-autocomplete input:",
-          el
-        );
         isComposingIME = false;
         return;
       }
-
-      console.log(
-        "[IME] Processing composition end for autocomplete input:",
-        el
-      );
 
       // Autocomplete inputs use debounce, regular inputs record directly
       let selector = null;
@@ -2149,7 +2017,6 @@
           timestamp: Date.now(),
           source: "composition-end", // Mark source for debugging
         };
-        console.log("[IME] Recording composition end input action:", action);
         chrome.runtime
           .sendMessage({ command: "record_action", data: action })
           .catch(() => {});
@@ -2350,7 +2217,6 @@
   function attachListeners() {
     // Attach various event listeners and MutationObserver
     if (isListenerAttached) return;
-    console.log("Attaching event listeners...");
 
     // Enable recording highlight mode
     enableRecordingHighlight();
@@ -2390,7 +2256,6 @@
           attributes: false,
           characterData: false,
         });
-        console.log("Content: MutationObserver attached for new elements.");
       }
     } catch (e) {
       console.warn("Content: Failed to attach MutationObserver:", e);
@@ -2400,7 +2265,6 @@
   function detachListeners() {
     // Remove event listeners and observer
     if (!isListenerAttached) return;
-    console.log("Detaching event listeners...");
 
     // Disable recording highlight mode
     disableRecordingHighlight();
@@ -2434,7 +2298,6 @@
       if (elementMutationObserver) {
         elementMutationObserver.disconnect();
         elementMutationObserver = null;
-        console.log("Content: MutationObserver disconnected.");
       }
       if (mutationDebounceTimer) {
         clearTimeout(mutationDebounceTimer);
@@ -2464,7 +2327,6 @@
 
     // Add mousemove listener for highlighting
     document.addEventListener("mousemove", handleRecordingHighlight, true);
-    console.log("[Recording Highlight] Enabled");
   }
 
   function disableRecordingHighlight() {
@@ -2503,8 +2365,6 @@
     } catch (e) {
       console.warn("[Recording Highlight] Failed to remove style element:", e);
     }
-
-    console.log("[Recording Highlight] Disabled");
   }
 
   function handleRecordingHighlight(e) {
@@ -2544,7 +2404,6 @@
 
   function startElementPicker(responseCallback) {
     if (elementPickerActive) {
-      console.log("[ElementPicker] Already active");
       return;
     }
 
@@ -2697,7 +2556,6 @@
     // Store references for cleanup
     overlay._pickerthHandlers = { handleMouseMove, handleClick, handleKeyDown };
 
-    console.log("[ElementPicker] Element picker mode activated");
   }
 
   function stopElementPicker() {
@@ -2734,7 +2592,6 @@
       tooltip.remove();
     }
 
-    console.log("[ElementPicker] Element picker mode deactivated");
   }
 
   // --- Message Listener ---
@@ -2743,18 +2600,12 @@
     // console.log("Content script received message:", message.command); // Optional debug
 
     if (message.command === "start_recording") {
-      console.log(
-        "[Content] Received start_recording command, attaching listeners..."
-      );
       attachListeners();
       sendResponse({ success: true });
       return true;
     }
 
     if (message.command === "stop_recording") {
-      console.log(
-        "[Content] Received stop_recording command, detaching listeners..."
-      );
       detachListeners();
       sendResponse({ success: true });
       return true;
@@ -2762,7 +2613,6 @@
 
     // Element picker mode for replacing selectors
     if (message.command === "start_element_picker") {
-      console.log("[Content] Starting element picker mode...");
       startElementPicker(sendResponse);
       return true; // Async response
     }
@@ -2837,13 +2687,13 @@
             }
         `;
       document.head.appendChild(style);
-      console.log("Selenium Recorder: Drag-drop styles injected");
+    
     } catch (e) {
       console.warn("Failed to inject drag-drop styles:", e);
     }
   })();
 
-  // attachListeners(); // 不要自動啟動，等待用戶明確開始錄製
+  // attachListeners(); 
 
   (function injectPopupWindowAndOpenHook() {
     // Inject window.open and popupWindow hooks to help detect new tabs/popups
@@ -2877,7 +2727,6 @@
       );
       if (legacy) {
         legacy.remove();
-        console.log("[Cleanup] Removed legacy screen recorder UI."); // Log cleanup message
       }
     } catch (e) {
       /* ignore */
@@ -2891,7 +2740,6 @@
     try {
       const rawTarget = event.target;
       if (!(rawTarget instanceof Element)) return;
-      console.log("[DND][dragstart] raw target:", rawTarget);
 
       // Use DND-Kit enhancer if available for better detection
       let dndKitDetection = null;
@@ -2952,10 +2800,6 @@
       // Reset drag tracking helpers
       window.__SELBAS_DRAG_LAST_HIT__ = null; // { selector, kind, rawSelector, elementInfo }
       window.__SELBAS_DRAG_COMPLETED__ = false;
-      console.log(
-        "handleDragStart: Recorded drag start (normalized to draggable card):",
-        window.__SELBAS_DRAG_SOURCE__
-      );
     } catch (e) {
       console.warn("Content: handleDragStart error:", e);
     }
@@ -2992,9 +2836,6 @@
           try {
             const selector = `#${CSS.escape(current.id)}`;
             if (document.querySelectorAll(selector).length === 1) {
-              console.log(
-                `[DND][resolveContainer] Found stable ID container: ${selector}`
-              );
               return {
                 selector: selector,
                 kind: "stable-id-container",
@@ -3092,27 +2933,13 @@
           const pathDepth = (selector.match(/\//g) || []).length;
           if (pathDepth < 4) continue;
 
-          console.log(
-            "[DND][resolveContainer] Selected container:",
-            c.el,
-            "kind:",
-            c.kind,
-            "priority:",
-            c.priority,
-            "depth:",
-            pathDepth
-          );
           return { selector: selector, kind: c.kind, element: c.el };
         } catch (e) {
-          console.log(
-            "[DND][resolveContainer] Error validating candidate:",
-            c.kind,
-            e
-          );
+          // Continue to next candidate
         }
       }
     } catch (e) {
-      console.log("[DND][resolveContainer] Error in resolution:", e);
+      // Return null on error
     }
     return null;
   }
@@ -3184,22 +3011,6 @@
     try {
       const arr = document.elementsFromPoint(clientX, clientY);
       if (!arr || !arr.length) return null;
-
-      // Debug: Log all elements under pointer for dnd-kit troubleshooting
-      console.log(
-        "[DND][elementsFromPoint] Stack at",
-        clientX,
-        clientY,
-        ":",
-        arr
-          .map(
-            (el) =>
-              el.tagName +
-              (el.className ? "." + el.className.split(" ").join(".") : "") +
-              (el.id ? "#" + el.id : "")
-          )
-          .slice(0, 5)
-      );
 
       // First pass: look for specific drop targets/containers
       for (const el of arr) {
@@ -3277,22 +3088,10 @@
             __selbasCheckEndOfListHeuristic(clientX, clientY, parentContainer)
           ) {
             shouldPreferContainer = true;
-            console.log(
-              "[DND][elementsFromPoint] End-of-list detected, preferring container over card"
-            );
           }
         }
 
         if (isDndTarget || (isSpecificContainer && !shouldPreferContainer)) {
-          console.log(
-            "[DND][elementsFromPoint] Found specific target:",
-            el,
-            trimmed,
-            "isDndTarget:",
-            isDndTarget,
-            "isSpecific:",
-            isSpecificContainer
-          );
           return {
             element: el,
             selector: trimmed,
@@ -3345,16 +3144,10 @@
         const pathDepth = (trimmed.match(/\//g) || []).length;
         if (pathDepth >= 6) {
           // Prefer deeper, more specific elements
-          console.log(
-            "[DND][elementsFromPoint] Using fallback target:",
-            el,
-            trimmed
-          );
           return { element: el, selector: trimmed };
         }
       }
     } catch (e) {
-      console.warn("[DND][elementsFromPoint] Error:", e);
       return null;
     }
     return null;
