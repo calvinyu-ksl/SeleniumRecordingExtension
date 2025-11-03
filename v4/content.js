@@ -227,6 +227,7 @@
 
   /**
    * Generates an Absolute XPath for a given element.
+   * For elements inside iframes, returns xpath within the iframe's document.
    * @param {Element} element The target HTML element.
    * @returns {string|null} The absolute XPath string or null if input is invalid.
    */
@@ -234,8 +235,12 @@
     // Generate absolute XPath (final fallback) with enhanced error handling
     if (!(element instanceof Element)) return null;
 
-    // Early check for detached elements
-    if (!element.isConnected || !document.contains(element)) {
+    // Check if element is inside an iframe
+    const ownerDoc = element.ownerDocument;
+    const isInIframe = ownerDoc && ownerDoc !== window.document;
+
+    // Early check for detached elements (relative to its own document)
+    if (!element.isConnected || !ownerDoc.contains(element)) {
       return null;
     }
 
@@ -315,6 +320,114 @@
     }
 
     // Handle case where we hit iteration limit
+    if (iterationCount >= MAX_ITERATIONS) {
+      return null;
+    }
+
+    const xpath = parts.length ? "/" + parts.join("/") : null;
+    
+    // If element is inside iframe, prefix with iframe information
+    if (isInIframe && xpath) {
+      try {
+        // Get the iframe element from parent window
+        const frameElement = ownerDoc.defaultView.frameElement;
+        if (frameElement && frameElement instanceof Element) {
+          // Generate XPath for the iframe element in the parent document
+          const iframeXPath = generateAbsoluteXPathInDocument(frameElement, window.document);
+          if (iframeXPath) {
+            // Return format: "iframe:/html/body/iframe[1]:::/html/body/div[1]"
+            return `iframe:${iframeXPath}:::${xpath}`;
+          }
+        }
+      } catch (e) {
+        // If we can't access parent window (cross-origin), just return the xpath within iframe
+        console.warn("Cannot access parent window for iframe xpath:", e);
+      }
+    }
+    
+    return xpath;
+  }
+  
+  /**
+   * Helper function to generate XPath for an element in a specific document
+   * @param {Element} element - The element to generate XPath for
+   * @param {Document} doc - The document context
+   * @returns {string|null} The XPath string
+   */
+  function generateAbsoluteXPathInDocument(element, doc) {
+    if (!(element instanceof Element)) return null;
+    if (!doc.contains(element)) return null;
+
+    const parts = [];
+    let currentElement = element;
+    let iterationCount = 0;
+    const MAX_ITERATIONS = 50;
+
+    while (
+      currentElement &&
+      currentElement.nodeType === Node.ELEMENT_NODE &&
+      iterationCount < MAX_ITERATIONS
+    ) {
+      iterationCount++;
+
+      let index = 0;
+      let hasSimilarSiblings = false;
+      let sibling = currentElement.previousSibling;
+
+      while (sibling) {
+        if (
+          sibling.nodeType === Node.ELEMENT_NODE &&
+          sibling.nodeName === currentElement.nodeName
+        ) {
+          index++;
+        }
+        sibling = sibling.previousSibling;
+      }
+
+      sibling = currentElement.nextSibling;
+      while (sibling) {
+        if (
+          sibling.nodeType === Node.ELEMENT_NODE &&
+          sibling.nodeName === currentElement.nodeName
+        ) {
+          hasSimilarSiblings = true;
+          break;
+        }
+        sibling = sibling.nextSibling;
+      }
+      if (index === 0) {
+        sibling = currentElement.previousSibling;
+        while (sibling) {
+          if (
+            sibling.nodeType === Node.ELEMENT_NODE &&
+            sibling.nodeName === currentElement.nodeName
+          ) {
+            hasSimilarSiblings = true;
+            break;
+          }
+          sibling = sibling.previousSibling;
+        }
+      }
+
+      const tagName = currentElement.nodeName.toLowerCase();
+      const part =
+        index > 0 || hasSimilarSiblings ? `${tagName}[${index + 1}]` : tagName;
+      parts.unshift(part);
+
+      if (tagName === "html") break;
+
+      currentElement = currentElement.parentNode;
+
+      if (!currentElement || currentElement.nodeType === Node.DOCUMENT_NODE) {
+        if (parts.length === 0 || parts[0] !== "html") {
+          if (parts.length > 0 && parts[0] !== "html") {
+            parts.unshift("html");
+          }
+        }
+        break;
+      }
+    }
+
     if (iterationCount >= MAX_ITERATIONS) {
       return null;
     }
