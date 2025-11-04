@@ -612,6 +612,7 @@
   /**
    * Generates multiple fallback selectors for a given HTML element.
    * Returns an array of selectors in priority order for use in findWorkingSelector.
+   * Only returns: ID selectors (CSS #id and XPath //*[@id="..."]) + Absolute XPath
    * @param {Element} el The target HTML element.
    * @returns {Array<string>} Array of selector strings (CSS and XPath)
    */
@@ -619,7 +620,6 @@
     if (!(el instanceof Element)) return [];
     
     const selectors = [];
-    const tagName = el.tagName.toLowerCase();
 
     // 1. ID-based selectors (if element has id)
     if (el.id) {
@@ -642,42 +642,7 @@
       } catch (e) { /* ignore */ }
     }
 
-    // 2. data-testid selectors (if exists)
-    const testId = el.getAttribute("data-testid");
-    if (testId) {
-      try {
-        const cssSelector = `[data-testid="${CSS.escape(testId)}"]`;
-        if (document.querySelectorAll(cssSelector).length === 1) {
-          selectors.push(cssSelector);
-        }
-      } catch (e) { /* ignore */ }
-      
-      try {
-        const xpathSelector = `//*[@data-testid="${testId}"]`;
-        if (document.evaluate(xpathSelector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength === 1) {
-          selectors.push(xpathSelector);
-        }
-      } catch (e) { /* ignore */ }
-    }
-
-    // 3. Class-based CSS selector (if has stable classes)
-    if (el.classList && el.classList.length > 0) {
-      const forbiddenClassesRegex = /^(?:active|focus|hover|selected|checked|disabled|visited|focus-within|focus-visible|focusNow|open|opened|closed|collapsed|expanded|js-|ng-|is-|has-|ui-|data-v-|aria-|css-|__recording_highlight__|__recording_)/i;
-      const stableClasses = Array.from(el.classList)
-        .map((c) => c.trim())
-        .filter((c) => c && !forbiddenClassesRegex.test(c) && /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(c));
-
-      if (stableClasses.length > 0) {
-        let baseSelector = `${tagName}.${stableClasses.map((c) => CSS.escape(c)).join(".")}`;
-        try {
-          if (document.querySelectorAll(baseSelector).length === 1) {
-            selectors.push(baseSelector);
-          }
-        } catch (e) { /* ignore */ }
-      }
-    }
-
-    // 4. Absolute XPath (always add as final fallback)
+    // 2. Absolute XPath (always add as final fallback)
     try {
       const absXPath = generateAbsoluteXPath(el);
       if (absXPath) {
@@ -685,9 +650,14 @@
       }
     } catch (e) { /* ignore */ }
 
-    // If no selectors generated, add tagName as last resort
+    // If no selectors generated, add absolute XPath without trimming
     if (selectors.length === 0) {
-      selectors.push(tagName);
+      try {
+        const absXPath = generateAbsoluteXPath(el);
+        if (absXPath) {
+          selectors.push(absXPath);
+        }
+      } catch (e) { /* ignore */ }
     }
 
     return selectors;
@@ -1058,11 +1028,11 @@
       // API accepts: 'click', 'type', 'select', 'setValue', 'visit', 'wait', 'operation', 'assertion', 'search', 'switch', 'drag'
       let stepAction = 'operation'; // Default fallback
       
-      if (actionType === 'click') {
+      if (actionType === 'click'||actionType==='link'||actionType==='button'||actionType==='slider') {
         stepAction = 'click';
       } else if (actionType === 'input') {
         stepAction = 'type';
-      } else if (actionType === 'select') {
+      } else if (actionType === 'select'||actionType==='radio'||actionType==='checkbox'||actionType==='dropdown'||actionType==='combobox') {
         stepAction = 'select';
       } else if (actionType === 'change') {
         stepAction = 'setValue';
@@ -1327,20 +1297,29 @@
           const titleAttr = targetForSelector.getAttribute("title");
           const dataValue = targetForSelector.getAttribute("data-value");
 
-          // Build a more reliable XPath using text content
+          // For Ant Select items, ONLY use text-based/attribute-based XPath
+          // Do NOT use absolute XPath because scrolling changes which item is at position [7]
+          selectorList = [];
+          
           if (optionText) {
-            // Use text-based XPath that is more stable
-            selector = `//*[contains(@class, 'ant-select-item') and normalize-space(text())='${optionText}']`;
-          } else if (titleAttr) {
-            selector = `//*[contains(@class, 'ant-select-item') and @title='${titleAttr}']`;
-          } else if (dataValue) {
-            selector = `//*[contains(@class, 'ant-select-item') and @data-value='${dataValue}']`;
-          } else {
-            // Fallback to absolute XPath
-            const abs = generateAbsoluteXPath(targetForSelector);
-            selector = abs ? trimNonInteractiveXPathTail(abs) : null;
+            selectorList.push(`//*[contains(@class, 'ant-select-item') and normalize-space(text())='${optionText}']`);
           }
-          selectorList = selector ? [selector] : [];
+          if (titleAttr) {
+            selectorList.push(`//*[contains(@class, 'ant-select-item') and @title='${titleAttr}']`);
+          }
+          if (dataValue) {
+            selectorList.push(`//*[contains(@class, 'ant-select-item') and @data-value='${dataValue}']`);
+          }
+          
+          // If no text/title/data-value, fallback to absolute XPath (rare case)
+          if (selectorList.length === 0) {
+            const absXPath = generateAbsoluteXPath(targetForSelector);
+            if (absXPath) {
+              selectorList.push(trimNonInteractiveXPathTail(absXPath));
+            }
+          }
+          
+          selector = selectorList.length > 0 ? selectorList[0] : null;
         }
         // Special handling for Ant Design Radio buttons
         else if (

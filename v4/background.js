@@ -828,10 +828,72 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         const selectorList = action.selectorList || [selForClick];
         const pythonSelectorList = selectorList.map(s => quotePythonString(s)).join(', ');
         
+        // Check if this is an Ant Design Select option (virtual scrolling)
+        const isAntSelectOption = selectorList.some(s => 
+          s.includes('ant-select-item') || s.includes('rc-select-item')
+        );
+        
         lines.push(`        # Try multiple selectors to find a working one`);
         lines.push(`        selector_list = [${pythonSelectorList}]`);
-        lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-        lines.push(`        `);
+
+        if (isAntSelectOption) {
+          // Special handling for Ant Design Select options with virtual scrolling
+          // MUST scroll dropdown BEFORE trying to find selector
+          lines.push(`        `);
+          lines.push(`        # Ant Design Select uses virtual scrolling - need real mouse scroll`);
+          lines.push(`        selector = None`);
+          lines.push(`        try:`);
+          lines.push(`            # Wait for dropdown to appear (animation may take time)`);
+          lines.push(`            self.wait_for_element_present('div.ant-select-dropdown:not(.ant-select-dropdown-hidden)', timeout=3)`);
+          lines.push(`            self.sleep(0.5)  # Wait for dropdown animation to complete`);
+          lines.push(`            `);
+          lines.push(`            # Find the actual scrollable container (rc-virtual-list-holder)`);
+          lines.push(`            try:`);
+          lines.push(`                scroll_container = self.find_element('div.rc-virtual-list-holder')`);
+          lines.push(`            except:`);
+          lines.push(`                scroll_container = self.find_element('div.ant-select-dropdown:not(.ant-select-dropdown-hidden)')`);
+          lines.push(`            `);
+          lines.push(`            # Move mouse to scroll container first`);
+          lines.push(`            from selenium.webdriver.common.action_chains import ActionChains`);
+          lines.push(`            actions = ActionChains(self.driver)`);
+          lines.push(`            actions.move_to_element(scroll_container).perform()`);
+          lines.push(`            self.sleep(0.2)`);
+          lines.push(`            `);
+          lines.push(`            # Scroll down multiple times to find the option`);
+          lines.push(`            max_attempts = 20`);
+          lines.push(`            for attempt in range(max_attempts):`);
+          lines.push(`                # Check if any selector is present`);
+          lines.push(`                for sel in selector_list:`);
+          lines.push(`                    try:`);
+          lines.push(`                        self.wait_for_element_present(sel, timeout=0.3)`);
+          lines.push(`                        selector = sel  # Remember the working selector`);
+          lines.push(`                        break  # Selector found, exit inner loop`);
+          lines.push(`                    except Exception:`);
+          lines.push(`                        continue`);
+          lines.push(`                if selector:`);
+          lines.push(`                    break  # Option found, exit outer loop`);
+          lines.push(`                `);
+          lines.push(`                # Scroll using multiple methods to ensure it works`);
+          lines.push(`                # Method 1: Direct scrollTop`);
+          lines.push(`                current_scroll = self.execute_script("return arguments[0].scrollTop", scroll_container)`);
+          lines.push(`                self.execute_script("arguments[0].scrollTop = arguments[0].scrollTop + 80", scroll_container)`);
+          lines.push(`                self.sleep(0.1)`);
+          lines.push(`                `);
+          lines.push(`                # Method 2: ScrollBy for smooth scrolling`);
+          lines.push(`                self.execute_script("arguments[0].scrollBy(0, 80)", scroll_container)`);
+          lines.push(`                self.sleep(0.1)`);
+          lines.push(`        except Exception as e:`);
+          lines.push(`            print(f"Virtual scroll failed: {e}")`);
+          lines.push(`            pass  # Continue even if scroll fails`);
+          lines.push(`        `);
+          lines.push(`        # If virtual scrolling didn't find it, fall back to findWorkingSelector`);
+          lines.push(`        if not selector:`);
+          lines.push(`            selector = self.findWorkingSelector(selector_list)`);
+          lines.push(`        `);
+        } else {
+          lines.push(`        selector = self.findWorkingSelector(selector_list)`);
+          lines.push(`        `);
+        }
 
         // Add scroll to element before clicking to ensure visibility
         lines.push(`        try:`);
@@ -1338,10 +1400,10 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(
             `                # Click the visible parent element to toggle`
           );
-          lines.push(`                self.js_click(${finalCheckboxSelector})`);
+          lines.push(`                self.click(${finalCheckboxSelector})`);
           lines.push(`        except Exception as e:`);
           lines.push(
-            `            # If JavaScript fails, try direct click on parent`
+            `            # If JavaScript check fails, try direct click on parent`
           );
           lines.push(`            self.click(${finalCheckboxSelector})`);
           // Add commented original selector
