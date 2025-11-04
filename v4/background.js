@@ -847,8 +847,10 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
 
         if (isAutocompleteOptionClick) {
           lines.push(`        self.click(selector)`);
+          lines.push(`        '''self.click(${quotePythonString(selForClick)})'''`);
         } else {
           lines.push(`        self.click(selector)`);
+          lines.push(`        '''self.click(${quotePythonString(selForClick)})'''`);
         }
         break;
       }
@@ -1137,6 +1139,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(
             `        self.send_keys(selector, '${escapedValue}')`
           );
+          lines.push(`        '''self.send_keys(${quotePythonString(inputSel)}, '${escapedValue}')'''`);
           lastInputSelector = selector;
 
           // Auto-send Enter for common combobox/autocomplete to submit
@@ -1212,6 +1215,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
                 "\\'"
               )}')`
             );
+            lines.push(`        '''self.select_option_by_value(${quotePythonString(selector)}, '${sval.replace(/'/g, "\\'")}')'''`);
           }
         }
         break;
@@ -1340,16 +1344,21 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             `            # If JavaScript fails, try direct click on parent`
           );
           lines.push(`            self.click(${finalCheckboxSelector})`);
+          // Add commented original selector
+          lines.push(`        '''self.click(${quotePythonString(selector)})'''`);
         } else {
           // Native checkbox: use SeleniumBase methods
-          if (isChecked)
+          if (isChecked) {
             lines.push(
               `        self.check_if_unchecked(${finalCheckboxSelector})`
             );
-          else
+            lines.push(`        '''self.check_if_unchecked(${quotePythonString(selector)})'''`);
+          } else {
             lines.push(
               `        self.uncheck_if_checked(${finalCheckboxSelector})`
             );
+            lines.push(`        '''self.uncheck_if_checked(${quotePythonString(selector)})'''`);
+          }
         }
         break;
       }
@@ -1397,6 +1406,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             `        self.wait_for_element_clickable(selector, timeout=10)`
           );
           lines.push(`        self.click(selector)`);
+          lines.push(`        '''self.click(${quotePythonString(selector)})'''`);
         }
         break;
       }
@@ -1444,8 +1454,10 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
               `        # Note: This was a drag-and-drop upload. SeleniumBase will use choose_file() anyway.`
             );
             lines.push(`        self.choose_file(selector, file_path)`);
+            lines.push(`        '''self.choose_file(${quotePythonString(selector)}, file_path)'''`);
           } else {
             lines.push(`        self.choose_file(selector, file_path)`);
+            lines.push(`        '''self.choose_file(${quotePythonString(selector)}, file_path)'''`);
           }
 
           if (fileList.length > 1) {
@@ -1508,6 +1520,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(
             `        perform_dnd_kit_drag(self, source_xpath, target_xpath)`
           );
+          lines.push(`        '''perform_dnd_kit_drag(self, ${quotePythonString(sourceSelector)}, ${quotePythonString(targetSelector)})'''`);
         } else if (hasDrag) {
           // Check if it's modern_components_test.html, use specialized drag function
           const isModernComponents =
@@ -1527,10 +1540,12 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             lines.push(
               `        perform_modern_drag(self, source_sel, target_sel)`
             );
+            lines.push(`        '''perform_modern_drag(self, ${quotePythonString(sourceSelector)}, ${quotePythonString(targetSelector)})'''`);
           } else {
             lines.push(
               `        perform_drag_with_fallback(self, source_sel, target_sel)`
             );
+            lines.push(`        '''perform_drag_with_fallback(self, ${quotePythonString(sourceSelector)}, ${quotePythonString(targetSelector)})'''`);
           }
         } else {
           lines.push(`        # Try multiple selectors for source and target`);
@@ -1539,6 +1554,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(`        source_sel = self.findWorkingSelector(source_list)`);
           lines.push(`        target_sel = self.findWorkingSelector(target_list)`);
           lines.push(`        self.drag_and_drop(source_sel, target_sel)`);
+          lines.push(`        '''self.drag_and_drop(${quotePythonString(sourceSelector)}, ${quotePythonString(targetSelector)})'''`);
         }
         break;
       }
@@ -1563,6 +1579,11 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         lines.push(
           `            print(f"Hover action skipped for {selector}: {e}")`
         );
+        // Add commented original selector
+        const hoverSelectorList = action.selectorList || [selector];
+        if (hoverSelectorList.length > 0) {
+          lines.push(`        '''self.hover(${quotePythonString(hoverSelectorList[0])})'''`);
+        }
         break;
       }
       case "Navigate": {
