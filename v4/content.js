@@ -1119,30 +1119,47 @@
       const rawTarget = event.target;
       if (!rawTarget) return;
 
+      // CRITICAL FIX: Detect clicks inside Ant Design date/time picker panels
+      // We still record these clicks, but don't interfere with event propagation
+      const isInsidePicker = rawTarget.closest && rawTarget.closest(
+        '.ant-picker-panel, .ant-picker-dropdown, .ant-picker-time-panel, ' +
+        '.ant-picker-header, .ant-picker-body, .ant-picker-content, ' +
+        '[class*="ant-picker-"], [class*="rc-picker-"]'
+      );
+      const isPickerInternalButton = isInsidePicker && (
+        rawTarget.matches('button, .ant-picker-header-next-btn, .ant-picker-header-prev-btn, .ant-picker-header-super-next-btn, .ant-picker-header-super-prev-btn, .ant-picker-year-btn, .ant-picker-month-btn') ||
+        rawTarget.closest('button, .ant-picker-header-next-btn, .ant-picker-header-prev-btn, .ant-picker-header-super-next-btn, .ant-picker-header-super-prev-btn, .ant-picker-year-btn, .ant-picker-month-btn')
+      );
+
       // CRITICAL FIX: If there's a currently focused input element, trigger its blur event first
       // This ensures the input action is recorded before the click action
-      const activeElement = document.activeElement;
-      if (
-        activeElement &&
-        activeElement !== rawTarget &&
-        activeElement !== document.body
-      ) {
-        const isTextInput =
-          (activeElement.tagName === "INPUT" &&
-            /^(text|password|search|email|url|tel|number)$/i.test(
-              activeElement.type || "text"
-            )) ||
-          activeElement.tagName === "TEXTAREA";
+      // BUT: Skip blur if clicking inside date/time picker to avoid closing it
+      if (!isPickerInternalButton) {
+        const activeElement = document.activeElement;
+        if (
+          activeElement &&
+          activeElement !== rawTarget &&
+          activeElement !== document.body
+        ) {
+          const isTextInput =
+            (activeElement.tagName === "INPUT" &&
+              /^(text|password|search|email|url|tel|number)$/i.test(
+                activeElement.type || "text"
+              )) ||
+            activeElement.tagName === "TEXTAREA";
 
-        if (isTextInput) {
-          console.log(
-            "[CLICK] Triggering blur on previously focused input before handling click"
-          );
-          // Trigger blur event synchronously to ensure proper ordering
-          activeElement.blur();
-          // Give a tiny delay to let the blur event handler complete
-          // This is processed synchronously in the same call stack
+          if (isTextInput) {
+            console.log(
+              "[CLICK] Triggering blur on previously focused input before handling click"
+            );
+            // Trigger blur event synchronously to ensure proper ordering
+            activeElement.blur();
+            // Give a tiny delay to let the blur event handler complete
+            // This is processed synchronously in the same call stack
+          }
         }
+      } else {
+        console.log('[CLICK] Skipping blur for date/time picker internal button');
       }
 
       // ENHANCED PRECISION: Always use coordinates to find the most accurate target
@@ -1753,6 +1770,10 @@
    * Handles real-time input events for autocomplete inputs only.
    * Regular inputs will be handled by blur/outfocus events instead.
    */
+  // Debounce timer for input events (per element)
+  const inputDebounceTimers = new WeakMap();
+  const INPUT_DEBOUNCE_MS = 800; // Wait 800ms after last keystroke before recording
+
   function handleInputEvent(event) {
     // Only handle real-time input for autocomplete inputs, regular inputs use blur events
     try {
@@ -1824,24 +1845,64 @@
       }
       if (!selector) return;
 
-      const action = {
-        // Send to background page, ask it to integrate final value with debounce
-        type: "Input",
-        selector, // Absolute XPath or wrapper XPath
-        selectorList: selectorList,
-        value: el.value != null ? String(el.value) : "",
-        inputType: type || tag,
-        selectorType: "XPath",
-        forceDebounce: true, // Ask background to debounce so we capture after user finishes typing
-        timestamp: Date.now(),
-        source: "autocomplete-input", // Mark source for debugging
-      };
-      chrome.runtime
-        .sendMessage({ command: "record_action", data: action })
-        .catch(() => {});
+      // Get the current value and check if we have an original value recorded
+      const currentValue = el.value != null ? String(el.value) : "";
+      const originalValue = inputOriginalValues.get(selector) || "";
+      
+      // Calculate the value to record based on what the user actually did
+      let valueToRecord = currentValue;
+      let needsClear = false;
+      
+      if (originalValue && originalValue.length > 0) {
+        if (currentValue.startsWith(originalValue)) {
+          valueToRecord = currentValue.substring(originalValue.length);
+        } else if (currentValue.length > 0) {
+          valueToRecord = currentValue;
+          needsClear = true;
+        } else {
+          valueToRecord = "";
+          needsClear = true;
+        }
+      }
+      
+      // Clean up the original value from our tracking map after recording
+      inputOriginalValues.delete(selector);
+      
+      // Clear existing debounce timer for this element
+      const existingTimer = inputDebounceTimers.get(el);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
 
-      // Send action data to user's API
-      sendActionToAPI(el, "input", action);
+      // Set up debounced recording - only record after user stops typing
+      const timerId = setTimeout(() => {
+        inputDebounceTimers.delete(el);
+        
+        // Get fresh value at time of recording (in case it changed)
+        const finalValue = el.value != null ? String(el.value) : "";
+        
+        const action = {
+          // Send to background page, ask it to integrate final value with debounce
+          type: "Input",
+          selector, // Absolute XPath or wrapper XPath
+          selectorList: selectorList,
+          value: finalValue,
+          needsClear: needsClear,
+          inputType: type || tag,
+          selectorType: "XPath",
+          forceDebounce: true, // Ask background to debounce so we capture after user finishes typing
+          timestamp: Date.now(),
+          source: "autocomplete-input", // Mark source for debugging
+        };
+        chrome.runtime
+          .sendMessage({ command: "record_action", data: action })
+          .catch(() => {});
+
+        // Send action data to user's API
+        sendActionToAPI(el, "input", action);
+      }, INPUT_DEBOUNCE_MS);
+      
+      inputDebounceTimers.set(el, timerId);
     } catch (e) {
       /* ignore */
     }
@@ -1902,6 +1963,9 @@
   // Track last recorded input values to prevent duplicates from auto-capitalization
   const lastRecordedInputs = new Map(); // selector -> {value, timestamp}
   const INPUT_DEDUP_WINDOW_MS = 1000; // 1 second window for deduplication
+  
+  // Track original values when input is focused/clicked to avoid recording pre-filled values
+  const inputOriginalValues = new Map(); // selector -> original value when focused
 
   // Periodically clean up old entries from the deduplication map
   setInterval(() => {
@@ -1913,6 +1977,52 @@
       }
     }
   }, 30000); // Clean up every 30 seconds
+
+  /**
+   * Handles focus events to track original values before user types
+   * This prevents recording pre-filled values from HTML attributes
+   * @param {Event} event
+   */
+  function handleFocusEvent(event) {
+    try {
+      const el = event.target;
+      if (!(el instanceof Element)) return;
+
+      const tag = el.tagName.toLowerCase();
+      const type = (el.getAttribute("type") || "").toLowerCase();
+
+      // Only track for input and textarea elements
+      if (tag !== "input" && tag !== "textarea") return;
+
+      // Skip non-text inputs (checkbox, radio, submit, etc.)
+      if (
+        tag === "input" &&
+        !["text", "password", "search", "email", "url", "tel", "number", ""].includes(type)
+      ) {
+        return;
+      }
+
+      // Generate selector for this input
+      let selector = null;
+      try {
+        selector = generateRobustSelector(el);
+      } catch (e) {
+        selector = generateAbsoluteXPath(el);
+      }
+      
+      if (!selector) return;
+
+      // Record the current value as the original value
+      const originalValue = el.value || "";
+      inputOriginalValues.set(selector, originalValue);
+      
+      if (originalValue) {
+        console.log(`[FOCUS] Recorded original value for ${selector}: "${originalValue}"`);
+      }
+    } catch (e) {
+      // Silently ignore errors
+    }
+  }
 
   /**
    * Handles blur events for regular input fields to record final value
@@ -1969,9 +2079,42 @@
       }
       if (!selector) return;
 
+      // Get the current value and check if we have an original value recorded
+      const currentValue = el.value != null ? String(el.value) : "";
+      const originalValue = inputOriginalValues.get(selector) || "";
+      
+      // Calculate the value to record based on what the user actually did
+      let valueToRecord = currentValue;
+      let needsClear = false;
+      
+      if (originalValue && originalValue.length > 0) {
+        if (currentValue.startsWith(originalValue)) {
+          // Case 1: User just appended text (original "11" → current "1122")
+          // Only record the new part
+          valueToRecord = currentValue.substring(originalValue.length);
+          console.log(`[INPUT] Appended text. Original: "${originalValue}", Current: "${currentValue}", Recording: "${valueToRecord}"`);
+        } else if (currentValue.length > 0) {
+          // Case 2: User modified/deleted original content (original "11" → deleted → "12222")
+          // Need to clear first, then type the full new value
+          valueToRecord = currentValue;
+          needsClear = true;
+          console.log(`[INPUT] Modified/replaced text. Original: "${originalValue}", Current: "${currentValue}", Need clear + type: "${valueToRecord}"`);
+        } else {
+          // Case 3: User cleared everything
+          valueToRecord = "";
+          needsClear = true;
+          console.log(`[INPUT] Cleared all text. Original: "${originalValue}"`);
+        }
+      } else {
+        // No original value (empty field), just record what was typed
+        console.log(`[INPUT] No original value, recording: "${currentValue}"`);
+      }
+      
+      // Clean up the original value from our tracking map
+      inputOriginalValues.delete(selector);
+      
       // Prevent meaningless recording of empty or very short values
-      const value = el.value != null ? String(el.value) : "";
-      if (value.length === 0) {
+      if (valueToRecord.length === 0) {
         return;
       }
 
@@ -1981,28 +2124,29 @@
       if (lastRecord) {
         const timeDiff = now - lastRecord.timestamp;
         // If same value recorded within dedup window, skip
-        if (lastRecord.value === value && timeDiff < INPUT_DEDUP_WINDOW_MS) {
+        if (lastRecord.value === valueToRecord && timeDiff < INPUT_DEDUP_WINDOW_MS) {
           return;
         }
         // If different value but both are case-variants (e.g., "Surname" vs "SURNAME")
         if (
-          lastRecord.value.toLowerCase() === value.toLowerCase() &&
-          lastRecord.value !== value &&
+          lastRecord.value.toLowerCase() === valueToRecord.toLowerCase() &&
+          lastRecord.value !== valueToRecord &&
           timeDiff < INPUT_DEDUP_WINDOW_MS
         ) {
           // Update to final value and skip duplicate
-          lastRecordedInputs.set(selector, { value, timestamp: now });
+          lastRecordedInputs.set(selector, { value: valueToRecord, timestamp: now });
           return;
         }
       }
 
       // Record the input
-      lastRecordedInputs.set(selector, { value, timestamp: now });
+      lastRecordedInputs.set(selector, { value: valueToRecord, timestamp: now });
 
       const action = {
         type: "Input",
         selector,
-        value: value,
+        value: valueToRecord,
+        needsClear: needsClear, // Flag to indicate if field needs to be cleared first
         inputType: type || tag,
         selectorType: "XPath",
         timestamp: Date.now(),
@@ -2099,10 +2243,34 @@
       if (!selector) selector = generateAbsoluteXPath(el);
 
       if (selector) {
+        // Get the current value and check if we have an original value recorded
+        const currentValue = el.value != null ? String(el.value) : "";
+        const originalValue = inputOriginalValues.get(selector) || "";
+        
+        // Calculate the value to record based on what the user actually did
+        let valueToRecord = currentValue;
+        let needsClear = false;
+        
+        if (originalValue && originalValue.length > 0) {
+          if (currentValue.startsWith(originalValue)) {
+            valueToRecord = currentValue.substring(originalValue.length);
+          } else if (currentValue.length > 0) {
+            valueToRecord = currentValue;
+            needsClear = true;
+          } else {
+            valueToRecord = "";
+            needsClear = true;
+          }
+        }
+        
+        // Clean up the original value from our tracking map
+        inputOriginalValues.delete(selector);
+        
         const action = {
           type: "Input",
           selector,
-          value: el.value != null ? String(el.value) : "",
+          value: valueToRecord,
+          needsClear: needsClear,
           inputType: type || tag,
           selectorType: "XPath",
           forceDebounce: isAutocomplete, // Only autocomplete inputs use debounce
@@ -2315,6 +2483,8 @@
 
     document.addEventListener("click", handleClick, true);
     document.addEventListener("change", handleChange, true); // Listen only to 'change' for inputs
+    // Focus event to track original values before user types
+    document.addEventListener("focus", handleFocusEvent, true);
     // Input event for autocomplete inputs only
     document.addEventListener("input", handleInputEvent, true);
     // Blur event for regular input fields to capture final values
@@ -4621,7 +4791,7 @@
           // });
 
           if (!isInteractive) {
-            //console.log('[HOVER-DEBUG] ❌ Element is not interactive, skipping');
+            //console.log('[HOVER-DEBUG] ❌ Not interactive, skipping');
             return;
           }
 

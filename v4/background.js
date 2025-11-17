@@ -299,8 +299,8 @@ function generateSeleniumBaseScript(options = {}, actionsToUse = null) {
           `    driver = self.driver`,
           `    print("[DND] Starting drag fallback pipeline")`,
           `    # Wait for both elements to exist`,
-          `    self.wait_for_element_present(source_xpath, timeout=20)`,
-          `    self.wait_for_element_present(target_xpath, timeout=20)`,
+          `    self.wait_for_element_present(source_xpath, timeout=TIMEOUT)`,
+          `    self.wait_for_element_present(target_xpath, timeout=TIMEOUT)`,
           `    src_el = self.find_element(source_xpath)`,
           `    tgt_el = self.find_element(target_xpath)`,
           ``,
@@ -394,8 +394,8 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           `    print(f"[MODERN-DND] Starting modern drag: {source_selector} -> {target_selector}")`,
           `    `,
           `    # Wait for elements`,
-          `    self.wait_for_element_present(source_selector, timeout=10)`,
-          `    self.wait_for_element_present(target_selector, timeout=10)`,
+          `    self.wait_for_element_present(source_selector, timeout=TIMEOUT)`,
+          `    self.wait_for_element_present(target_selector, timeout=TIMEOUT)`,
           `    `,
           `    # Smart selector handling (supports XPath and CSS)`,
           `    js_drag = """`,
@@ -458,7 +458,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           `        return False`,
           ``,
           `# --- DND-Kit Enhanced Support (auto-injected) ---`,
-          `def perform_dnd_kit_drag(self, source_selector, target_selector, timeout=10):`,
+          `def perform_dnd_kit_drag(self, source_selector, target_selector, timeout=TIMEOUT):`,
           `    """Specialized drag and drop for DND-Kit library with multiple strategies."""`,
           `    print(f"[DND-KIT] Starting DND-Kit drag from {source_selector} to {target_selector}")`,
           `    `,
@@ -467,8 +467,8 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           `    self.wait_for_element_present(target_selector, timeout=timeout)`,
           `    `,
           `    try:`,
-          `        source_el = self.wait_for_element_visible(source_selector, timeout=5)`,
-          `        target_el = self.wait_for_element_visible(target_selector, timeout=5)`,
+          `        source_el = self.wait_for_element_visible(source_selector, timeout=TIMEOUT)`,
+          `        target_el = self.wait_for_element_visible(target_selector, timeout=TIMEOUT)`,
           `    except:`,
           `        source_el = self.find_element(source_selector)`,
           `        target_el = self.find_element(target_selector)`,
@@ -529,20 +529,24 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           ``,
         ]
       : []),
+    ``,
+    `# --- Global Configuration ---`,
+    `TIMEOUT = 20  # Default timeout for all wait operations`,
+    ``,
     `class ${className}(BaseCase):`,
     ``,
     `    # --- Custom helper functions for dynamic elements ---`,
-    `    def wait_for_scroll_and_enable(self, scroll_selector, checkbox_selector, timeout=30):`,
+    `    def wait_for_scroll_and_enable(self, scroll_selector, checkbox_selector, timeout=TIMEOUT):`,
     `        """Scroll to bottom of an element and wait for checkbox to be enabled."""`,
     `        print(f"[SCROLL-ENABLE] Scrolling to bottom of {scroll_selector} and waiting for {checkbox_selector} to be enabled")`,
     `        `,
     `        # First ensure the scroll area is visible`,
     `        try:`,
-    `            self.wait_for_element_present(scroll_selector, timeout=5)`,
+    `            self.wait_for_element_present(scroll_selector, timeout=TIMEOUT)`,
     `            self.scroll_to(scroll_selector)`,
     `        except Exception:`,
     `            pass  # Continue even if scroll fails`,
-    `        self.wait_for_element_present(scroll_selector, timeout=10)`,
+    `        self.wait_for_element_present(scroll_selector, timeout=TIMEOUT)`,
     `        `,
     `        # Scroll to bottom of the scroll area using JavaScript`,
     `        scroll_script = """`,
@@ -573,7 +577,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
     `        print(f"[SCROLL-ENABLE] Timeout waiting for checkbox to be enabled")`,
     `        return False`,
     ``,
-    `    def wait_for_attribute_not_value(self, selector, attribute, value=None, timeout=10):`,
+    `    def wait_for_attribute_not_value(self, selector, attribute, value=None, timeout=TIMEOUT):`,
     `        """Wait for an element's attribute to not have a specific value (or not exist)."""`,
     `        if value is None:`,
     `            # Wait for attribute to not exist (like disabled)`,
@@ -603,7 +607,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
 
     `        for i, selector in enumerate(selector_list, start=1):`,
     `            try:`,
-    `                self.wait_for_element_present(selector, timeout=2)`,
+    `                self.wait_for_element_present(selector, timeout=TIMEOUT)`,
     `                return selector`,
     `            except Exception as e:`,
     `                if i == len(selector_list):`,
@@ -832,64 +836,115 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         const isAntSelectOption = selectorList.some(s => 
           s.includes('ant-select-item') || s.includes('rc-select-item')
         );
-        
+        lines.push(`        # Step ${stepCounter}: Click action`);
         lines.push(`        # Try multiple selectors to find a working one`);
         lines.push(`        selector_list = [${pythonSelectorList}]`);
 
         if (isAntSelectOption) {
           // Special handling for Ant Design Select options with virtual scrolling
           // MUST scroll dropdown BEFORE trying to find selector
-          lines.push(`        `);
-          lines.push(`        # Ant Design Select uses virtual scrolling - need real mouse scroll`);
+          
+          lines.push(`        # Ant Design Select uses virtual scrolling`);
           lines.push(`        selector = None`);
+          lines.push(`        print("[VIRTUAL-SCROLL] Starting virtual scroll search...")`);
+          lines.push(`        `);
           lines.push(`        try:`);
-          lines.push(`            # Wait for dropdown to appear (animation may take time)`);
-          lines.push(`            self.wait_for_element_present('div.ant-select-dropdown:not(.ant-select-dropdown-hidden)', timeout=3)`);
-          lines.push(`            self.sleep(0.5)  # Wait for dropdown animation to complete`);
+          lines.push(`            # Wait for dropdown to appear`);
+          lines.push(`            print("[VIRTUAL-SCROLL] Waiting for dropdown...")`);
+          lines.push(`            self.wait_for_element_present('div.ant-select-dropdown:not(.ant-select-dropdown-hidden)', timeout=TIMEOUT)`);
+          lines.push(`            print("[VIRTUAL-SCROLL] Dropdown found!")`);
+          lines.push(`            self.sleep(0.5)`);
           lines.push(`            `);
-          lines.push(`            # Find the actual scrollable container (rc-virtual-list-holder)`);
-          lines.push(`            try:`);
-          lines.push(`                scroll_container = self.find_element('div.rc-virtual-list-holder')`);
-          lines.push(`            except:`);
-          lines.push(`                scroll_container = self.find_element('div.ant-select-dropdown:not(.ant-select-dropdown-hidden)')`);
+          lines.push(`            # Find the holder and simulate real scroll with events`);
+          lines.push(`            print("[VIRTUAL-SCROLL] Finding holder...")`);
+          lines.push(`            holder = self.driver.find_element("css selector", 'div.rc-virtual-list-holder')`);
+          lines.push(`            print("[VIRTUAL-SCROLL] Found holder")`);
           lines.push(`            `);
-          lines.push(`            # Move mouse to scroll container first`);
-          lines.push(`            from selenium.webdriver.common.action_chains import ActionChains`);
-          lines.push(`            actions = ActionChains(self.driver)`);
-          lines.push(`            actions.move_to_element(scroll_container).perform()`);
-          lines.push(`            self.sleep(0.2)`);
+          lines.push(`            # Get initial info`);
+          lines.push(`            scroll_height = self.execute_script("return arguments[0].scrollHeight", holder)`);
+          lines.push(`            client_height = self.execute_script("return arguments[0].clientHeight", holder)`);
+          lines.push(`            print(f"[VIRTUAL-SCROLL] ScrollHeight: {scroll_height}, ClientHeight: {client_height}")`);
           lines.push(`            `);
-          lines.push(`            # Scroll down multiple times to find the option`);
-          lines.push(`            max_attempts = 20`);
+          lines.push(`            # Scroll with direct scrollTop manipulation + event dispatching`);
+          lines.push(`            max_attempts = 40`);
+          lines.push(`            scroll_step = 100`);
+          lines.push(`            print(f"[VIRTUAL-SCROLL] Starting scroll, max attempts: {max_attempts}")`);
+          lines.push(`            `);
           lines.push(`            for attempt in range(max_attempts):`);
-          lines.push(`                # Check if any selector is present`);
+          lines.push(`                print(f"[VIRTUAL-SCROLL] Attempt {attempt + 1}/{max_attempts}")`);
+          lines.push(`                `);
+          lines.push(`                # Check if target element exists`);
           lines.push(`                for sel in selector_list:`);
           lines.push(`                    try:`);
-          lines.push(`                        self.wait_for_element_present(sel, timeout=0.3)`);
-          lines.push(`                        selector = sel  # Remember the working selector`);
-          lines.push(`                        break  # Selector found, exit inner loop`);
+          lines.push(`                        if sel.startswith('/'):`);
+          lines.push(`                            elements = self.driver.find_elements("xpath", sel)`);
+          lines.push(`                        else:`);
+          lines.push(`                            elements = self.driver.find_elements("css selector", sel)`);
+          lines.push(`                        `);
+          lines.push(`                        if elements and len(elements) > 0:`);
+          lines.push(`                            selector = sel`);
+          lines.push(`                            print(f"[VIRTUAL-SCROLL] ✓ Found element: {sel}")`);
+          lines.push(`                            break`);
           lines.push(`                    except Exception:`);
           lines.push(`                        continue`);
+          lines.push(`                `);
           lines.push(`                if selector:`);
-          lines.push(`                    break  # Option found, exit outer loop`);
+          lines.push(`                    print("[VIRTUAL-SCROLL] Element found, breaking loop")`);
+          lines.push(`                    break`);
           lines.push(`                `);
-          lines.push(`                # Scroll using multiple methods to ensure it works`);
-          lines.push(`                # Method 1: Direct scrollTop`);
-          lines.push(`                current_scroll = self.execute_script("return arguments[0].scrollTop", scroll_container)`);
-          lines.push(`                self.execute_script("arguments[0].scrollTop = arguments[0].scrollTop + 80", scroll_container)`);
-          lines.push(`                self.sleep(0.1)`);
+          lines.push(`                # Scroll using multiple methods`);
+          lines.push(`                current_scroll = self.execute_script("return arguments[0].scrollTop || 0", holder)`);
+          lines.push(`                new_scroll = current_scroll + scroll_step`);
           lines.push(`                `);
-          lines.push(`                # Method 2: ScrollBy for smooth scrolling`);
-          lines.push(`                self.execute_script("arguments[0].scrollBy(0, 80)", scroll_container)`);
-          lines.push(`                self.sleep(0.1)`);
+          lines.push(`                # Method 1: Set scrollTop`);
+          lines.push(`                self.execute_script("arguments[0].scrollTop = arguments[1]", holder, new_scroll)`);
+          lines.push(`                `);
+          lines.push(`                # Method 2: Dispatch scroll event (crucial for virtual list)`);
+          lines.push(`                self.execute_script("""`);
+          lines.push(`                    var element = arguments[0];`);
+          lines.push(`                    var scrollEvent = new Event('scroll', { bubbles: true, cancelable: true });`);
+          lines.push(`                    element.dispatchEvent(scrollEvent);`);
+          lines.push(`                """, holder)`);
+          lines.push(`                `);
+          lines.push(`                # Verify`);
+          lines.push(`                actual_scroll = self.execute_script("return arguments[0].scrollTop || 0", holder)`);
+          lines.push(`                print(f"[VIRTUAL-SCROLL] Scrolled from {current_scroll} to {actual_scroll}")`);
+          lines.push(`                `);
+          lines.push(`                # Check if reached end`);
+          lines.push(`                if actual_scroll == current_scroll and current_scroll > 0:`);
+          lines.push(`                    print("[VIRTUAL-SCROLL] Reached end of list")`);
+          lines.push(`                    break`);
+          lines.push(`                `);
+          lines.push(`                self.sleep(0.3)`);
+          lines.push(`            `);
+          lines.push(`            print(f"[VIRTUAL-SCROLL] Final selector: {selector}")`);
+          lines.push(`            `);
+          lines.push(`            # After finding element, scroll it into view within the holder`);
+          lines.push(`            if selector:`);
+          lines.push(`                try:`);
+          lines.push(`                    print("[VIRTUAL-SCROLL] Scrolling element into view...")`);
+          lines.push(`                    if selector.startswith('/'):`);
+          lines.push(`                        target_elem = self.driver.find_element("xpath", selector)`);
+          lines.push(`                    else:`);
+          lines.push(`                        target_elem = self.driver.find_element("css selector", selector)`);
+          lines.push(`                    `);
+          lines.push(`                    # Scroll the element into view using JavaScript`);
+          lines.push(`                    self.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});", target_elem)`);
+          lines.push(`                    print("[VIRTUAL-SCROLL] Element scrolled into view")`);
+          lines.push(`                    self.sleep(0.5)`);
+          lines.push(`                except Exception as e:`);
+          lines.push(`                    print(f"[VIRTUAL-SCROLL] Scroll into view failed: {e}")`);
+          lines.push(`            `);
+          lines.push(`            if not selector:`);
+          lines.push(`                print("[VIRTUAL-SCROLL] ✗ Element not found after all scroll attempts")`);
           lines.push(`        except Exception as e:`);
-          lines.push(`            print(f"Virtual scroll failed: {e}")`);
-          lines.push(`            pass  # Continue even if scroll fails`);
+          lines.push(`            print(f"[VIRTUAL-SCROLL] ✗ Virtual scroll failed with error: {e}")`);
+          lines.push(`            import traceback`);
+          lines.push(`            traceback.print_exc()`);
           lines.push(`        `);
           lines.push(`        # If virtual scrolling didn't find it, fall back to findWorkingSelector`);
           lines.push(`        if not selector:`);
           lines.push(`            selector = self.findWorkingSelector(selector_list)`);
-          lines.push(`        `);
         } else {
           lines.push(`        selector = self.findWorkingSelector(selector_list)`);
           lines.push(`        `);
@@ -898,13 +953,16 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         // Add scroll to element before clicking to ensure visibility
         lines.push(`        try:`);
         lines.push(
-          `            self.wait_for_element_present(selector, timeout=5)`
+          `            self.wait_for_element_present(selector, timeout=TIMEOUT)`
         );
         lines.push(`            self.scroll_to(selector)`);
         lines.push(`        except Exception:`);
         lines.push(`            pass  # Continue even if scroll fails`);
         lines.push(
-          `        self.wait_for_element_clickable(selector, timeout=10)`
+          `        self.wait_for_element_present(selector, timeout=TIMEOUT)`
+        );
+        lines.push(
+          `        self.wait_for_element_clickable(selector, timeout=TIMEOUT)`
         );
 
         if (isAutocompleteOptionClick) {
@@ -914,6 +972,35 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(`        self.click(selector)`);
           lines.push(`        '''self.click(${quotePythonString(selForClick)})'''`);
         }
+        
+        // Check if this is an Ant Design button that might have loading state
+        const isAntButton = selectorList.some(s => 
+          s.includes('ant-btn') || (action.elementInfo && action.elementInfo.className && action.elementInfo.className.includes('ant-btn'))
+        );
+        
+        if (isAntButton) {
+          lines.push(`        # Check if Ant Design button enters loading state`);
+          lines.push(`        try:`);
+          lines.push(`            # Wait briefly to see if loading class appears`);
+          lines.push(`            self.sleep(0.2)`);
+          lines.push(`            element = self.find_element(selector)`);
+          lines.push(`            class_attr = element.get_attribute('class') or ''`);
+          lines.push(`            if 'ant-btn-loading' in class_attr:`);
+          lines.push(`                print('[ANT-BTN] Button entered loading state, waiting for completion...')`);
+          lines.push(`                # Wait for loading class to be removed`);
+          lines.push(`                start_time = time.time()`);
+          lines.push(`                while time.time() - start_time < TIMEOUT:`);
+          lines.push(`                    element = self.find_element(selector)`);
+          lines.push(`                    class_attr = element.get_attribute('class') or ''`);
+          lines.push(`                    if 'ant-btn-loading' not in class_attr:`);
+          lines.push(`                        print('[ANT-BTN] Button loading complete')`);
+          lines.push(`                        self.click(selector)`);
+          lines.push(`                        break`);
+          lines.push(`                    time.sleep(0.1)`);
+          lines.push(`        except Exception as e:`);
+          lines.push(`            pass  # Continue even if loading check fails`);
+        }
+        
         break;
       }
       case "Slider": {
@@ -941,15 +1028,14 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         lines.push(`        # Try multiple selectors to find a working one`);
         lines.push(`        selector_list = [${pythonSelectorList}]`);
         lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-        lines.push(`        `);
 
         const targetVal = action.value != null ? String(action.value) : "";
         const tEsc = targetVal.replace(/'/g, "\\'");
 
         // Ensure slider is visible and clickable
-        //lines.push(`        self.scroll_to(selector, timeout=10)`);
+        //lines.push(`        self.scroll_to(selector, timeout=TIMEOUT)`);
         lines.push(
-          `        self.wait_for_element_clickable(selector, timeout=10)`
+          `        self.wait_for_element_clickable(selector, timeout=TIMEOUT)`
         );
         lines.push(`        slider = self.find_element(selector)`);
 
@@ -1006,11 +1092,11 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             )`);
         lines.push(`            try:`);
         lines.push(
-          `                self.wait_for_attribute(selector, 'value', target_value, timeout=5)`
+          `                self.wait_for_attribute(selector, 'value', target_value, timeout=TIMEOUT)`
         );
         lines.push(`            except Exception:`);
         lines.push(`                # If value doesn't change, try waiting for aria-valuenow
-                self.wait_for_attribute(selector, 'aria-valuenow', target_value, timeout=3)`);
+                self.wait_for_attribute(selector, 'aria-valuenow', target_value, timeout=TIMEOUT)`);
         lines.push(`        except Exception as e:`);
         lines.push(`            print(f"JavaScript setup: {str(e)}")`);
         lines.push(`            self.save_screenshot('javascript_error.png')`);
@@ -1044,10 +1130,10 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         lines.push(`                actions.release().perform()`);
         lines.push(`                try:`);
         lines.push(
-          `                    self.wait_for_attribute(${finalSelector}, 'value', target_value, timeout=5)`
+          `                    self.wait_for_attribute(${finalSelector}, 'value', target_value, timeout=TIMEOUT)`
         );
         lines.push(`                except Exception:
-                    self.wait_for_attribute(${finalSelector}, 'aria-valuenow', target_value, timeout=3)`);
+                    self.wait_for_attribute(${finalSelector}, 'aria-valuenow', target_value, timeout=TIMEOUT)`);
         lines.push(`            except Exception as e2:`);
         lines.push(`                print(f"ActionChains fail: {str(e2)}")`);
         lines.push(
@@ -1166,11 +1252,11 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(`        # Try multiple selectors to find a working one`);
           lines.push(`        selector_list = [${pythonSelectorList}]`);
           lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-          lines.push(`        `);
+          
 
           // Wait for target input to appear and scroll into view
           lines.push(
-            `        self.wait_for_element_present(selector, timeout=10)`
+            `        self.wait_for_element_present(selector, timeout=TIMEOUT)`
           );
           lines.push(`        try:`);
           lines.push(`            self.scroll_to(selector)`);
@@ -1197,7 +1283,13 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             lines.push(`        self.click(selector)`);
           }
 
-          // Use send_keys to maintain compatibility (won't clear existing content)
+          // Check if we need to clear the field first (user edited/replaced original content)
+          if (action.needsClear) {
+            lines.push(`        # Clear existing content before typing new value`);
+            lines.push(`        self.clear(selector)`);
+          }
+
+          // Use send_keys to type the value
           lines.push(
             `        self.send_keys(selector, '${escapedValue}')`
           );
@@ -1260,16 +1352,16 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             lines.push(`        # Try multiple selectors to find a working one`);
             lines.push(`        selector_list = [${pythonSelectorList}]`);
             lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-            lines.push(`        `);
+            
             lines.push(`        try:`);
             lines.push(
-              `            self.wait_for_element_present(selector, timeout=5)`
+              `            self.wait_for_element_present(selector, timeout=TIMEOUT)`
             );
             lines.push(`            self.scroll_to(selector)`);
             lines.push(`        except Exception:`);
             lines.push(`            pass  # Continue even if scroll fails`);
             lines.push(
-              `        self.wait_for_element_clickable(selector, timeout=10)`
+              `        self.wait_for_element_clickable(selector, timeout=TIMEOUT)`
             );
             lines.push(
               `        self.select_option_by_value(selector, '${sval.replace(
@@ -1306,7 +1398,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         lines.push(`        # Try multiple selectors to find a working one`);
         lines.push(`        selector_list = [${pythonSelectorList}]`);
         lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-        lines.push(`        `);
+        
 
         // For XPath selectors ending with '/input', we need to handle custom checkbox components (like Ant Design)
         // Strip the '/input' suffix and click the parent element instead
@@ -1348,7 +1440,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         } else {
           lines.push(`        try:`);
           lines.push(
-            `            self.wait_for_element_present(${finalCheckboxSelector}, timeout=5)`
+            `            self.wait_for_element_present(${finalCheckboxSelector}, timeout=TIMEOUT)`
           );
           lines.push(`            self.scroll_to(${finalCheckboxSelector})`);
           lines.push(`        except Exception:`);
@@ -1357,10 +1449,10 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
             `        # Wait for checkbox to be enabled (handle dynamic checkboxes)`
           );
           lines.push(
-            `        self.wait_for_element_present(${finalCheckboxSelector}, timeout=10)`
+            `        self.wait_for_element_present(${finalCheckboxSelector}, timeout=TIMEOUT)`
           );
           lines.push(
-            `        self.wait_for_element_clickable(${finalCheckboxSelector}, timeout=30)`
+            `        self.wait_for_element_clickable(${finalCheckboxSelector}, timeout=TIMEOUT)`
           );
 
           if (!isCustomCheckbox) {
@@ -1369,7 +1461,7 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
               `        # Additional wait for checkbox to become enabled`
             );
             lines.push(
-              `        self.wait_for_attribute_not_value(${finalCheckboxSelector}, 'disabled', timeout=30)`
+              `        self.wait_for_attribute_not_value(${finalCheckboxSelector}, 'disabled', timeout=TIMEOUT)`
             );
           }
         }
@@ -1456,16 +1548,15 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(`        # Try multiple selectors to find a working one`);
           lines.push(`        selector_list = [${pythonSelectorList}]`);
           lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-          lines.push(`        `);
           lines.push(`        try:`);
           lines.push(
-            `            self.wait_for_element_present(selector, timeout=5)`
+            `            self.wait_for_element_present(selector, timeout=TIMEOUT)`
           );
           lines.push(`            self.scroll_to(selector)`);
           lines.push(`        except Exception:`);
           lines.push(`            pass  # Continue even if scroll fails`);
           lines.push(
-            `        self.wait_for_element_clickable(selector, timeout=10)`
+            `        self.wait_for_element_clickable(selector, timeout=TIMEOUT)`
           );
           lines.push(`        self.click(selector)`);
           lines.push(`        '''self.click(${quotePythonString(selector)})'''`);
@@ -1495,7 +1586,6 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         lines.push(`        # Try multiple selectors to find a working one`);
         lines.push(`        selector_list = [${pythonSelectorList}]`);
         lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-        lines.push(`        `);
 
         if (method === "drag-drop" && action.dropCoordinates) {
           // For drag-drop uploads, we might want to add additional context
@@ -1593,7 +1683,6 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
           lines.push(`        target_list = [${pythonTargetList}]`);
           lines.push(`        source_sel = self.findWorkingSelector(source_list)`);
           lines.push(`        target_sel = self.findWorkingSelector(target_list)`);
-          lines.push(`        `);
           
           if (isModernComponents) {
             lines.push(
@@ -1630,10 +1719,9 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
         lines.push(`        # Try multiple selectors to find a working one`);
         lines.push(`        selector_list = [${pythonSelectorList}]`);
         lines.push(`        selector = self.findWorkingSelector(selector_list)`);
-        lines.push(`        `);
         lines.push(`        try:`);
         lines.push(
-          `            self.wait_for_element_present(selector, timeout=5)`
+          `            self.wait_for_element_present(selector, timeout=TIMEOUT)`
         );
         lines.push(`            self.scroll_to(selector)`);
         lines.push(`            self.hover(selector)`);
@@ -1705,7 +1793,6 @@ fire(src,'mousemove',s.x,s.y);fire(src,'mousedown',s.x,s.y);fire(src,'dragstart'
     lines.push(``);
   }
   lines.push(`        print("\\n*** Test script complete! ***")`);
-  lines.push(``);
 
   // If there are uploads: insert import os and UPLOAD_DIR (if files are embedded, point to ./uploads)
   if (hasUpload) {
